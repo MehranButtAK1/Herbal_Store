@@ -1,21 +1,17 @@
 /* ===========================
-   CONFIG / STATE
+   BACKEND + PERSISTENCE
 =========================== */
-const API_BASE = "https://herbalbackend-production.up.railway.app"; // <- your backend
+// ✅ Correct base to avoid /api/api
+const API_BASE = "https://herbalbackend-production.up.railway.app";
+const API_PRODUCTS = `${API_BASE}/api/products`;
+
+// LocalStorage keys (keep your existing behavior)
 const LS_KEY = "products_v2";
 const ADMIN_KEY = "isAdmin";
 const THEME_KEY = "theme";
-
-// Keep your visual admin password gate the same:
 const ADMIN_PASSWORD = "123";
 
-// Will be sent as header to backend for protected routes
-let adminSecret = "";
-
-/**
- * Local fallback seed (only used if backend fetch fails first time)
- * After successful fetch, we always use server data.
- */
+// Fallback seed (same as yours)
 let products = JSON.parse(localStorage.getItem(LS_KEY)) || [
   {
     id: 1,
@@ -56,7 +52,7 @@ let currentFilterCat = "All";
 let currentSearch = "";
 
 /* ===========================
-   ELEMENTS
+   ELEMENTS (same as yours)
 =========================== */
 const navToggle = document.getElementById("menu-toggle");
 const navLinks = document.getElementById("nav-links");
@@ -99,7 +95,7 @@ const inpDetails = document.getElementById("prod-details");
 const formReset = document.getElementById("form-reset");
 
 /* ===========================
-   THEME
+   THEME (unchanged)
 =========================== */
 (function initTheme(){
   const saved = localStorage.getItem(THEME_KEY);
@@ -113,7 +109,7 @@ darkToggle.addEventListener("click", ()=>{
 });
 
 /* ===========================
-   NAV MOBILE TOGGLE + ACTIVE
+   NAV MOBILE TOGGLE
 =========================== */
 navToggle.addEventListener("click", ()=> {
   navLinks.classList.toggle("show");
@@ -127,80 +123,85 @@ document.querySelectorAll('.nav-links a').forEach(link => {
 });
 
 /* ===========================
-   BACKEND HELPERS
+   HELPERS
 =========================== */
-function normalize(p) {
-  // Map Mongo _id -> id while keeping everything else as-is
-  const id = p._id || p.id;
+function saveProductsLocal(){ localStorage.setItem(LS_KEY, JSON.stringify(products)); }
+function uniqueCategories(){ return [...new Set(products.map(p => p.category))].sort(); }
+function normalize(p){
+  // Ensure backend/LS shapes align
   return {
-    id,
+    id: p.id,
     name: p.name,
     category: p.category,
     price: Number(p.price),
-    image: p.image || "",
-    details: p.details || ""
+    image: p.image,
+    details: p.details
   };
 }
 
-async function fetchProductsFromServer() {
-  const res = await fetch(`${API_BASE}/api/products`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to fetch products");
-  const data = await res.json();
-  return Array.isArray(data) ? data.map(normalize) : [];
-}
-
-async function createOnServer(doc) {
-  const res = await fetch(`${API_BASE}/api/products`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-secret": adminSecret || ""   // must match your backend ADMIN_SECRET
-    },
-    body: JSON.stringify(doc)
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(t || "Create failed");
-  }
-  return normalize(await res.json());
-}
-
-async function updateOnServer(id, doc) {
-  const res = await fetch(`${API_BASE}/api/products/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-secret": adminSecret || ""
-    },
-    body: JSON.stringify(doc)
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(t || "Update failed");
-  }
-  return normalize(await res.json());
-}
-
-async function deleteOnServer(id) {
-  const res = await fetch(`${API_BASE}/api/products/${id}`, {
-    method: "DELETE",
-    headers: { "x-admin-secret": adminSecret || "" }
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(t || "Delete failed");
-  }
-  return true;
-}
-
 /* ===========================
-   PERSISTENCE HELPERS (local)
+   API WRAPPER (with graceful fallback)
 =========================== */
-function saveProducts(){
-  localStorage.setItem(LS_KEY, JSON.stringify(products));
+async function apiGetAll(){
+  try{
+    const res = await fetch(API_PRODUCTS, {headers:{Accept:"application/json"}});
+    if(!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if(Array.isArray(data)){
+      products = data.map(normalize);
+      saveProductsLocal(); // cache
+    }
+  }catch(err){
+    console.warn("GET failed, using localStorage cache:", err);
+    products = JSON.parse(localStorage.getItem(LS_KEY)) || products;
+  }
 }
-function uniqueCategories(){
-  return [...new Set(products.map(p => p.category))].sort();
+
+async function apiCreate(body){
+  try{
+    const res = await fetch(API_PRODUCTS, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error(await res.text());
+    return await res.json();
+  }catch(err){
+    console.warn("POST failed, saving locally:", err);
+    // Local fallback
+    const newId = products.length ? Math.max(...products.map(p=>p.id||0))+1 : 1;
+    const local = {...body, id:newId};
+    products.push(local);
+    saveProductsLocal();
+    return local;
+  }
+}
+
+async function apiUpdate(id, body){
+  try{
+    const res = await fetch(`${API_PRODUCTS}/${id}`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error(await res.text());
+    return await res.json();
+  }catch(err){
+    console.warn("PUT failed, updating locally:", err);
+    const idx = products.findIndex(p=>p.id===id);
+    if(idx>-1){ products[idx] = {...body, id}; saveProductsLocal(); }
+    return products.find(p=>p.id===id);
+  }
+}
+
+async function apiDelete(id){
+  try{
+    const res = await fetch(`${API_PRODUCTS}/${id}`, { method:"DELETE" });
+    if(!res.ok) throw new Error(await res.text());
+  }catch(err){
+    console.warn("DELETE failed, removing locally:", err);
+  }finally{
+    products = products.filter(p=>p.id!==id);
+    saveProductsLocal();
+  }
 }
 
 /* ===========================
@@ -243,7 +244,6 @@ searchInput.addEventListener("input", ()=>{
 =========================== */
 function filteredList(){
   let list = products;
-
   if(currentFilterCat !== "All"){
     list = list.filter(p => p.category === currentFilterCat);
   }
@@ -288,18 +288,18 @@ function renderProducts(){
       <button class="buy-now">Buy on WhatsApp</button>
     `;
 
-    // image fallback
+    // fallback image
     const img = card.querySelector("img");
     img.addEventListener("error", ()=>{
       img.src = "placeholder.png";
       img.alt = product.name + " (image missing)";
     });
 
-    // modal open
+    // open modal
     card.querySelector(".product-image").addEventListener("click", ()=> showDetails(product));
     card.querySelector(".title").addEventListener("click", ()=> showDetails(product));
 
-    // qty controls
+    // qty
     const qtySpan = card.querySelector(".quantity-control span");
     card.querySelector(".qty-minus").addEventListener("click", ()=>{
       qtySpan.textContent = Math.max(1, parseInt(qtySpan.textContent) - 1);
@@ -308,14 +308,14 @@ function renderProducts(){
       qtySpan.textContent = parseInt(qtySpan.textContent) + 1;
     });
 
-    // WhatsApp buy
+    // WhatsApp
     card.querySelector(".buy-now").addEventListener("click", ()=>{
       const qty = parseInt(qtySpan.textContent);
-      const message = `Hello, I want to buy ${qty} x ${product.name} for Rs ${Number(product.price) * qty}`;
+      const message = `Hello, I want to buy ${qty} x ${product.name} for Rs ${product.price * qty}`;
       window.open(`https://wa.me/923115121207?text=${encodeURIComponent(message)}`, "_blank");
     });
 
-    // admin edit/delete
+    // admin buttons
     const editBtn = card.querySelector(".edit-btn");
     const delBtn = card.querySelector(".delete-btn");
     if(editBtn){
@@ -324,13 +324,10 @@ function renderProducts(){
     if(delBtn){
       delBtn.addEventListener("click", async ()=>{
         if(confirm(`Delete "${product.name}"?`)){
-          try{
-            await deleteOnServer(product.id);
-            await refreshFromServer();
-            alert("Deleted from server.");
-          }catch(err){
-            alert("Delete failed: " + err.message);
-          }
+          await apiDelete(product.id);   // backend + local fallback
+          populateCategoryChips(currentFilterCat);
+          renderProducts();
+          populateCategoryDropdown();
         }
       });
     }
@@ -343,7 +340,6 @@ function renderProducts(){
    MODAL
 =========================== */
 let modalProduct = null;
-
 function showDetails(product){
   modalProduct = product;
   modalImg.src = product.image;
@@ -354,16 +350,14 @@ function showDetails(product){
   modal.style.display = "flex";
   modal.setAttribute("aria-hidden", "false");
 }
+modalClose.addEventListener("click", closeModal);
+window.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
+window.addEventListener("keydown", (e)=>{ if(e.key === "Escape") closeModal(); });
 function closeModal(){
   modal.style.display = "none";
   modal.setAttribute("aria-hidden", "true");
   modalProduct = null;
 }
-modalClose.addEventListener("click", closeModal);
-window.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
-window.addEventListener("keydown", (e)=>{ if(e.key === "Escape") closeModal(); });
-
-// modal qty + buy
 modalQtyMinus.addEventListener("click", ()=>{
   modalQtySpan.textContent = Math.max(1, parseInt(modalQtySpan.textContent) - 1);
 });
@@ -373,7 +367,7 @@ modalQtyPlus.addEventListener("click", ()=>{
 modalBuy.addEventListener("click", ()=>{
   if(!modalProduct) return;
   const qty = parseInt(modalQtySpan.textContent);
-  const message = `Hello, I want to buy ${qty} x ${modalProduct.name} for Rs ${Number(modalProduct.price) * qty}`;
+  const message = `Hello, I want to buy ${qty} x ${modalProduct.name} for Rs ${modalProduct.price * qty}`;
   window.open(`https://wa.me/923115121207?text=${encodeURIComponent(message)}`, "_blank");
 });
 
@@ -412,30 +406,26 @@ function refreshAdminUI(){
     document.querySelectorAll(".card-actions").forEach(el => el.style.display = "none");
   }
 }
-
 adminLoginBtn.addEventListener("click", ()=>{
   const val = (adminPass.value || "").trim();
-  // Keep your same UX: unlock panel only if matches "123"
   if(val === ADMIN_PASSWORD){
     isAdmin = true;
-    adminSecret = val; // we also use this as backend secret header
     localStorage.setItem(ADMIN_KEY, "true");
     adminPass.value = "";
     refreshAdminUI();
+    alert("Admin mode enabled");
   }else{
     alert("Incorrect password!");
   }
 });
-
 adminExitBtn && adminExitBtn.addEventListener("click", ()=>{
   isAdmin = false;
-  adminSecret = "";
   localStorage.setItem(ADMIN_KEY, "false");
   refreshAdminUI();
 });
 
 /* ===========================
-   ADD / EDIT PRODUCT (SERVER)
+   ADD / EDIT PRODUCT
 =========================== */
 let editingId = null;
 
@@ -443,7 +433,7 @@ productForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
   if(!isAdmin){ alert("Login as admin first."); return; }
 
-  const idVal = inpId.value ? inpId.value : null;
+  const idVal = inpId.value ? parseInt(inpId.value) : null;
   const name = inpName.value.trim();
   const categorySelect = selCategory.value;
   const newCategory = inpNewCategory.value.trim();
@@ -458,33 +448,34 @@ productForm.addEventListener("submit", async (e)=>{
   }
   const category = newCategory || categorySelect;
 
-  // Allow simple filenames (e.g. apricot.jpg) OR full URLs; if file is provided, use base64
+  // Prefer file -> base64, else use URL/filename
   let imageData = url;
   if(file){
-    imageData = await fileToBase64(file); // stored as base64 string
+    imageData = await fileToBase64(file);
   }
 
-  const payload = { name, category, price, image: imageData, details };
+  const body = { name, category, price, image: imageData, details };
 
-  try{
-    if(idVal || editingId){
-      const idToUse = idVal || editingId;
-      await updateOnServer(idToUse, payload);
-      editingId = null;
-    }else{
-      await createOnServer(payload);
-    }
-
-    productForm.reset();
-    inpId.value = "";
-    selCategory.value = "";
-    inpNewCategory.value = "";
-
-    await refreshFromServer();
-    alert("Saved to server!");
-  }catch(err){
-    alert("Save failed: " + err.message + "\nTip: Make sure your backend ADMIN_SECRET matches the password you entered (currently '123').");
+  if(idVal || editingId){
+    const idToUse = idVal || editingId;
+    await apiUpdate(idToUse, body);
+    editingId = null;
+  }else{
+    await apiCreate(body);
   }
+
+  saveProductsLocal();
+  productForm.reset();
+  inpId.value = "";
+  selCategory.value = "";
+  inpNewCategory.value = "";
+
+  await apiGetAll(); // refresh from backend if available
+  populateCategoryDropdown();
+  populateCategoryChips(currentFilterCat);
+  renderProducts();
+
+  alert("Saved!");
 });
 
 formReset.addEventListener("click", ()=>{
@@ -494,7 +485,6 @@ formReset.addEventListener("click", ()=>{
   selCategory.value = "";
 });
 
-/* Start editing a product */
 function startEdit(product){
   editingId = product.id;
   inpId.value = product.id;
@@ -526,37 +516,23 @@ function fileToBase64(file){
 }
 
 /* ===========================
-   INIT + SERVER SYNC
+   INIT
 =========================== */
-async function refreshFromServer() {
-  try{
-    const serverProducts = await fetchProductsFromServer();
-    products = serverProducts;
-    // cache last good set locally (for faster load offline)
-    saveProducts();
-  }catch(err){
-    // keep current local products if server unreachable
-    console.warn("Using local fallback:", err.message);
-  }
+async function init(){
+  await apiGetAll(); // try backend first; falls back to LS if needed
   populateCategoryDropdown();
-  populateCategoryChips(currentFilterCat);
+  populateCategoryChips("All");
   renderProducts();
   refreshAdminUI();
 }
-
-async function init(){
-  await refreshFromServer();
-}
 init();
 
-/* ====== For Home & About Animation ====== */
+/* ===== Home/About fade-in animation ===== */
 document.addEventListener("scroll", () => {
   document.querySelectorAll(".fade-in").forEach(section => {
     const sectionTop = section.getBoundingClientRect().top;
     const windowHeight = window.innerHeight;
-    if (sectionTop < windowHeight - 100) {
-      section.classList.add("show");
-    }
+    if (sectionTop < windowHeight - 100) section.classList.add("show");
   });
 });
 document.dispatchEvent(new Event("scroll"));
