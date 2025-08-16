@@ -1,7 +1,7 @@
 /* ===========================
    CONFIG / STATE
 =========================== */
-const API_BASE = "https://herbalbackend-production.up.railway.app/api"; // <- your backend
+const API_BASE = "https://herbalbackend-production.up.railway.app"; // <- your backend
 const LS_KEY = "products_v2";
 const ADMIN_KEY = "isAdmin";
 const THEME_KEY = "theme";
