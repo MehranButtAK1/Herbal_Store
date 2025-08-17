@@ -8,11 +8,10 @@
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-
   <meta name="color-scheme" content="light dark" />
 </head>
 <body>
-  <!-- Navbar -->
+  <!-- Top Nav -->
   <header>
     <nav class="navbar">
       <div class="logo">🌿 Herbal Store</div>
@@ -31,16 +30,29 @@
             <i class="fa-solid fa-moon"></i>
           </button>
         </li>
+        <li>
+          <button id="wishlistBtn" class="icon-btn badge-wrap" title="Wishlist">
+            <i class="fa-regular fa-heart"></i>
+            <span class="badge" id="wishlistCount">0</span>
+          </button>
+        </li>
+        <li>
+          <button id="cartBtn" class="icon-btn badge-wrap" title="Cart">
+            <i class="fa-solid fa-cart-shopping"></i>
+            <span class="badge" id="cartCount">0</span>
+          </button>
+        </li>
       </ul>
     </nav>
   </header>
 
-  <!-- Home -->
+  <!-- Hero -->
   <section id="home" class="section hero fade-in">
     <h1><i class="fas fa-leaf"></i> Welcome to Herbal Store</h1>
     <p>We are a team of experts — Dr.Salar (FCPS), Dr.Rabia (RPh), Mehran (RPh), and Arslan (RPh) — dedicated to crafting 100% natural herbal products from the purest sources. Our vision is to make premium herbal remedies available at the most affordable prices.</p>
   </section>
 
+  <!-- About -->
   <section id="about" class="section fade-in">
     <h2><i class="fas fa-seedling"></i> About Us</h2>
     <p>At Herbal Store, we believe in the healing power of nature. Every product we create is made with care, precision, and passion. From sourcing the best natural ingredients to ensuring quality in every step, we strive to bring you safe, effective, and affordable herbal solutions.</p>
@@ -54,8 +66,32 @@
         <input type="search" id="search" placeholder="Search products..." />
       </div>
     </div>
+
     <div class="category-buttons" id="category-buttons"></div>
+
+    <!-- Skeleton while loading -->
+    <div id="skeleton-grid" class="product-grid"></div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="empty" style="display:none">No products found</div>
+
     <div id="product-list" class="product-grid"></div>
+  </section>
+
+  <!-- Testimonials -->
+  <section class="section fade-in">
+    <h2>What Customers Say</h2>
+    <div class="testi-wrap">
+      <button class="testi-nav" id="testiPrev"><i class="fa-solid fa-chevron-left"></i></button>
+      <div class="testi-viewport">
+        <div id="testiTrack" class="testi-track">
+          <div class="testi-card">Amazing quality! My hair feels so soft and healthy. — Ayesha</div>
+          <div class="testi-card">Affordable and genuinely natural. Highly recommended. — Hamza</div>
+          <div class="testi-card">Customer service is fantastic and fast delivery. — Sana</div>
+        </div>
+      </div>
+      <button class="testi-nav" id="testiNext"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
   </section>
 
   <!-- Contact -->
@@ -84,10 +120,33 @@
           <span>1</span>
           <button class="qty-plus" aria-label="Increase">+</button>
         </div>
-        <button class="buy-now" id="modal-buy">Buy on WhatsApp</button>
+        <button class="buy-now" id="modal-add-cart">Add to Cart</button>
+        <button class="buy-now outline" id="modal-buy">Buy on WhatsApp</button>
       </div>
     </div>
   </div>
+
+  <!-- Cart Drawer -->
+  <aside id="cart-drawer" aria-hidden="true">
+    <div class="cart-head">
+      <h3><i class="fa-solid fa-cart-shopping"></i> Your Cart</h3>
+      <button id="cartClose" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="cartItems" class="cart-items"></div>
+    <div class="cart-foot">
+      <div class="row">
+        <span>Subtotal</span>
+        <strong id="cartSubtotal">Rs 0</strong>
+      </div>
+      <div class="row gap">
+        <button id="cartClear" class="secondary w100">Clear Cart</button>
+        <button id="cartCheckout" class="w100">Checkout on WhatsApp</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Toasts -->
+  <div id="toast-container" class="toasts"></div>
 
   <!-- Admin Gear -->
   <button id="admin-gear" title="Admin" aria-label="Open Admin">
@@ -147,4 +206,4 @@
 
   <script src="script.js"></script>
 </body>
-      </html>
+                                                                                 </html>
