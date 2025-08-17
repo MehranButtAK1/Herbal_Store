@@ -5,13 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Herbal Store Premium</title>
 
-  <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+
+  <!-- Color-scheme hint for OS toggles -->
   <meta name="color-scheme" content="light dark" />
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Top Nav -->
+  <!-- Header / Navbar -->
   <header>
     <nav class="navbar">
       <div class="logo">🌿 Herbal Store</div>
@@ -26,129 +33,114 @@
         <li><a href="#products">Products</a></li>
         <li><a href="#contact">Contact</a></li>
         <li>
+          <!-- Theme toggle (Phase 3 text/icon; JS saves to localStorage `theme`) -->
           <button id="darkToggle" class="icon-btn" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">
             <i class="fa-solid fa-moon"></i>
-          </button>
-        </li>
-        <li>
-          <button id="wishlistBtn" class="icon-btn badge-wrap" title="Wishlist">
-            <i class="fa-regular fa-heart"></i>
-            <span class="badge" id="wishlistCount">0</span>
-          </button>
-        </li>
-        <li>
-          <button id="cartBtn" class="icon-btn badge-wrap" title="Cart">
-            <i class="fa-solid fa-cart-shopping"></i>
-            <span class="badge" id="cartCount">0</span>
           </button>
         </li>
       </ul>
     </nav>
   </header>
 
-  <!-- Hero -->
+  <!-- Hero / Home (Phase 3 copy preserved) -->
   <section id="home" class="section hero fade-in">
     <h1><i class="fas fa-leaf"></i> Welcome to Herbal Store</h1>
-    <p>We are a team of experts — Dr.Salar (FCPS), Dr.Rabia (RPh), Mehran (RPh), and Arslan (RPh) — dedicated to crafting 100% natural herbal products from the purest sources. Our vision is to make premium herbal remedies available at the most affordable prices.</p>
+    <p>
+      We are a team of experts — Dr.Salar (FCPS), Dr.Rabia (RPh), Mehran (RPh), and Arslan (RPh) — dedicated to crafting 100% natural herbal products from the purest sources. Our vision is to make premium herbal remedies available at the most affordable prices.
+    </p>
   </section>
 
-  <!-- About -->
+  <!-- About (Phase 3 copy preserved) -->
   <section id="about" class="section fade-in">
     <h2><i class="fas fa-seedling"></i> About Us</h2>
-    <p>At Herbal Store, we believe in the healing power of nature. Every product we create is made with care, precision, and passion. From sourcing the best natural ingredients to ensuring quality in every step, we strive to bring you safe, effective, and affordable herbal solutions.</p>
+    <p>
+      At Herbal Store, we believe in the healing power of nature. Every product we create is made with care, precision, and passion. From sourcing the best natural ingredients to ensuring quality in every step, we strive to bring you safe, effective, and affordable herbal solutions.
+    </p>
   </section>
 
   <!-- Products -->
-  <section id="products" class="section products-section">
+  <section id="products" class="section products-section fade-in">
     <div class="products-header">
       <h2>Our Products</h2>
+
+      <!-- Toolbar (Phase 4/5 features) -->
       <div class="toolbar">
-        <input type="search" id="search" placeholder="Search products..." />
+        <input id="search" type="search" placeholder="Search products..." aria-label="Search products" />
+
+        <!-- Price Range Chip -->
+        <div class="price-chip" id="priceChip" aria-label="Price range">
+          <input class="min" type="number" placeholder="Min" inputmode="numeric" />
+          <span class="dash">—</span>
+          <input class="max" type="number" placeholder="Max" inputmode="numeric" />
+          <button class="mini-btn price-apply" type="button">Apply</button>
+          <button class="mini-btn ghost price-clear" type="button">Clear</button>
+        </div>
+
+        <!-- Sort -->
+        <select id="sort" class="sort-select" title="Sort products" aria-label="Sort products">
+          <option value="featured">Sort: Featured</option>
+          <option value="price-asc">Price: Low → High</option>
+          <option value="price-desc">Price: High → Low</option>
+          <option value="name-asc">Name: A → Z</option>
+          <option value="name-desc">Name: Z → A</option>
+        </select>
+
+        <!-- Wishlist / Cart badges -->
+        <button id="wishlistBtn" class="pill-btn" title="Wishlist" aria-label="Open Wishlist">
+          <i class="fa-regular fa-heart"></i>
+          <span id="wishlistCount" class="badge">0</span>
+        </button>
+        <button id="cartBtn" class="pill-btn" title="Cart" aria-label="Open Cart">
+          <i class="fa-solid fa-cart-shopping"></i>
+          <span id="cartCount" class="badge">0</span>
+        </button>
       </div>
     </div>
 
-    <div class="category-buttons" id="category-buttons"></div>
+    <!-- Category Chips -->
+    <div id="category-buttons" class="category-buttons" role="tablist" aria-label="Product categories"></div>
 
-    <!-- Skeleton while loading -->
-    <div id="skeleton-grid" class="product-grid"></div>
+    <!-- Product Grid -->
+    <div id="product-list" class="product-grid" aria-live="polite"></div>
+
+    <!-- Skeletons (shown while loading) -->
+    <div id="skeletons" class="product-grid" style="display:none">
+      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
+      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
+      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
+      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
+    </div>
 
     <!-- Empty state -->
-    <div id="empty-state" class="empty" style="display:none">No products found</div>
-
-    <div id="product-list" class="product-grid"></div>
+    <div id="empty-state" class="empty-state" style="display:none">No products found.</div>
   </section>
 
-  <!-- Testimonials -->
+  <!-- Testimonials slider (Phase 4/5) -->
   <section class="section fade-in">
-    <h2>What Customers Say</h2>
+    <h2>Happy Customers</h2>
     <div class="testi-wrap">
-      <button class="testi-nav" id="testiPrev"><i class="fa-solid fa-chevron-left"></i></button>
-      <div class="testi-viewport">
-        <div id="testiTrack" class="testi-track">
-          <div class="testi-card">Amazing quality! My hair feels so soft and healthy. — Ayesha</div>
-          <div class="testi-card">Affordable and genuinely natural. Highly recommended. — Hamza</div>
-          <div class="testi-card">Customer service is fantastic and fast delivery. — Sana</div>
-        </div>
+      <button id="testiPrev" class="testi-nav" aria-label="Previous"><i class="fa-solid fa-chevron-left"></i></button>
+      <div id="testiTrack" class="testi-track" aria-live="polite">
+        <div class="testi-card">“Amazing hair oil! Visible results in 3 weeks.” — Ayesha</div>
+        <div class="testi-card">“Natural toner worked great for my skin.” — Zainab</div>
+        <div class="testi-card">“Fast delivery and excellent quality.” — Hammad</div>
+        <div class="testi-card">“Affordable and authentic.” — Fizza</div>
       </div>
-      <button class="testi-nav" id="testiNext"><i class="fa-solid fa-chevron-right"></i></button>
+      <button id="testiNext" class="testi-nav" aria-label="Next"><i class="fa-solid fa-chevron-right"></i></button>
     </div>
   </section>
 
-  <!-- Contact -->
-  <section id="contact" class="section contact-section">
+  <!-- Contact (Phase 3 contacts preserved) -->
+  <section id="contact" class="section contact-section fade-in">
     <h2>Contact Us</h2>
     <div class="contact-details">
-      <div class="contact-item">📱 <a href="https://wa.me/923115121207">+92311 5121207</a></div>
+      <div class="contact-item">📱 <a href="https://wa.me/923115121207" target="_blank" rel="noopener">+92311 5121207</a></div>
       <div class="contact-item">📧 <a href="mailto:mehranbutt.k@gmail.com">mehranbutt.k@gmail.com</a></div>
-      <div class="contact-item">🎵 <a href="https://tiktok.com/@mehranbutt_">@mehranbutt_</a></div>
+      <div class="contact-item">🎵 <a href="https://tiktok.com/@mehranbutt_" target="_blank" rel="noopener">@mehranbutt_</a></div>
     </div>
   </section>
 
-  <!-- Product Modal -->
-  <div id="product-modal" class="modal" aria-hidden="true">
-    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <button class="close" id="modal-close" aria-label="Close">&times;</button>
-      <img id="modal-image" src="" alt="" />
-      <div class="modal-scrollable">
-        <h3 id="modal-title"></h3>
-        <p id="modal-details"></p>
-        <p id="modal-price" class="price"></p>
-      </div>
-      <div class="modal-actions">
-        <div class="quantity-control" id="modal-qty">
-          <button class="qty-minus" aria-label="Decrease">-</button>
-          <span>1</span>
-          <button class="qty-plus" aria-label="Increase">+</button>
-        </div>
-        <button class="buy-now" id="modal-add-cart">Add to Cart</button>
-        <button class="buy-now outline" id="modal-buy">Buy on WhatsApp</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cart Drawer -->
-  <aside id="cart-drawer" aria-hidden="true">
-    <div class="cart-head">
-      <h3><i class="fa-solid fa-cart-shopping"></i> Your Cart</h3>
-      <button id="cartClose" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div id="cartItems" class="cart-items"></div>
-    <div class="cart-foot">
-      <div class="row">
-        <span>Subtotal</span>
-        <strong id="cartSubtotal">Rs 0</strong>
-      </div>
-      <div class="row gap">
-        <button id="cartClear" class="secondary w100">Clear Cart</button>
-        <button id="cartCheckout" class="w100">Checkout on WhatsApp</button>
-      </div>
-    </div>
-  </aside>
-
-  <!-- Toasts -->
-  <div id="toast-container" class="toasts"></div>
-
-  <!-- Admin Gear -->
+  <!-- Admin Floating Gear -->
   <button id="admin-gear" title="Admin" aria-label="Open Admin">
     <i class="fa-solid fa-gear"></i>
   </button>
@@ -162,48 +154,95 @@
 
     <!-- Login -->
     <div id="admin-login">
-      <input type="password" id="admin-pass" placeholder="Enter Admin Password (123)">
-      <button id="admin-login-btn">Login</button>
+      <input type="password" id="admin-pass" placeholder="Enter Admin Password (123)" />
+      <button id="admin-login-btn" class="mini-btn">Login</button>
     </div>
 
-    <!-- Form -->
+    <!-- Product Form (Create / Update) -->
     <form id="product-form" style="display:none">
       <h4>Add / Edit Product</h4>
 
-      <input type="hidden" id="prod-id">
+      <input type="hidden" id="prod-id" />
 
-      <input type="text" id="prod-name" placeholder="Product Name" required>
+      <input type="text" id="prod-name" placeholder="Product Name" required />
 
       <label>Choose Existing Category</label>
-      <select id="prod-category-select"><option value="">Select a category</option></select>
+      <select id="prod-category-select">
+        <option value="">Select a category</option>
+      </select>
 
       <label>Or Create New Category</label>
-      <input type="text" id="prod-category-new" placeholder="New Category Name">
+      <input type="text" id="prod-category-new" placeholder="New Category Name" />
 
-      <input type="number" id="prod-price" placeholder="Price" step="0.01" required>
+      <input type="number" id="prod-price" placeholder="Price (Rs)" step="0.01" required />
 
-      <input type="text" id="prod-image-url" placeholder="Image filename or URL (e.g. apricot.jpg)">
+      <input type="text" id="prod-image-url" placeholder="Image filename or URL (e.g. apricot.jpg)" />
 
       <label class="file-label">
-        <input type="file" id="prod-image-file" accept="image/*">
+        <input type="file" id="prod-image-file" accept="image/*" />
         <span><i class="fa-solid fa-image"></i> Upload Image (optional)</span>
       </label>
 
       <textarea id="prod-details" placeholder="Product Details" required></textarea>
 
       <div class="form-actions">
-        <button type="submit">Save Product</button>
+        <button type="submit" class="mini-btn">Save Product</button>
         <button type="button" id="form-reset" class="secondary">Reset</button>
       </div>
-      <p class="hint">Tip: Use either a simple filename (e.g., <code>apricot.jpg</code>) or upload a file.</p>
+      <p class="hint">
+        Tip: Use either a simple filename (e.g., <code>apricot.jpg</code>) or upload a file.
+      </p>
     </form>
 
-    <!-- Exit -->
     <div id="admin-action-section" style="display:none; position:sticky; bottom:0; padding-top:10px; background:var(--card)">
       <button id="admin-exit" class="exit-btn">Exit Admin Mode</button>
     </div>
   </aside>
 
+  <!-- Cart Drawer -->
+  <aside id="cart-drawer" aria-hidden="true">
+    <div class="cart-head">
+      <h3>Your Cart</h3>
+      <button id="cartClose" class="icon-btn" aria-label="Close Cart"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="cartItems" class="cart-items"></div>
+    <div class="cart-foot">
+      <div class="row"><strong>Subtotal</strong><strong id="cartSubtotal">Rs 0</strong></div>
+      <div class="row gap">
+        <button id="cartClear" class="secondary">Clear</button>
+        <button id="cartCheckout" class="mini-btn" style="flex:1">Checkout on WhatsApp</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Product Modal -->
+  <div id="product-modal" class="modal" aria-hidden="true">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button id="modal-close" class="close" aria-label="Close">&times;</button>
+      <img id="modal-image" src="" alt="" />
+      <div class="modal-scrollable">
+        <h3 id="modal-title"></h3>
+        <div id="modal-details"></div>
+        <div id="modal-price" class="price"></div>
+      </div>
+      <div class="modal-actions">
+        <div class="quantity-control" id="modal-qty">
+          <button class="qty-minus" aria-label="Decrease">-</button>
+          <span>1</span>
+          <button class="qty-plus" aria-label="Increase">+</button>
+        </div>
+        <div class="modal-buttons">
+          <button id="modal-add" class="btn btn-ghost">Add to Cart</button>
+          <button id="modal-buy" class="btn btn-primary">Buy on WhatsApp</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast-container"></div>
+
+  <!-- App JS -->
   <script src="script.js"></script>
 </body>
-                                                                                 </html>
+  </html>
