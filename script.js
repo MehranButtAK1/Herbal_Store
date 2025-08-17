@@ -1,79 +1,46 @@
-/* ===========================
-   CONFIG / STATE
-=========================== */
-const API_URL = "https://herbalbackend-production.up.railway.app"; // ✅ your backend base
-const WA_NUMBER = "923115121207";
+const API_URL = "https://herbalbackend-production.up.railway.app"; // backend base
+const WA_NUMBER = "923115121207"; // WhatsApp number (no +)
 
-const LS_KEY = "products_v2";
-const ADMIN_KEY = "isAdmin";
-const THEME_KEY = "theme";
-const ADMIN_PASSWORD = "123";
-
+const LS_PRODUCTS = "products_v2";
 const LS_WISHLIST = "wishlist_v1";
 const LS_CART = "cart_v1";
+const LS_THEME = "theme";
+const LS_ADMIN = "isAdmin";
 
+const ADMIN_PASSWORD = "123"; // change in prod
+
+/* ====== STATE ====== */
 let products = [];
-let isAdmin = localStorage.getItem(ADMIN_KEY) === "true";
+let isAdmin = localStorage.getItem(LS_ADMIN) === "true";
+let wishlist = JSON.parse(localStorage.getItem(LS_WISHLIST) || "[]");
+let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");
+
 let currentFilterCat = "All";
 let currentSearch = "";
 let showWishlistOnly = false;
+let sortMode = "featured";
 
-let wishlist = JSON.parse(localStorage.getItem(LS_WISHLIST) || "[]");          // [id, id, ...]
-let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");                  // [{id,name,price,image,qty}]
+let priceMin = "";
+let priceMax = "";
 
-/* --- Local fallback products (used only when backend fails) --- */
-const FALLBACK_PRODUCTS = [
-  {
-    id: "f1",
-    name: "Marsea Herbal Oil (150 ml)",
-    category: "Hair Oil",
-    price: 800,
-    image: "marsea-oil.jpg",
-    details:
-      "100% pure herbal hair oil, crafted with coconut oil, castor oil, and olive oil, enriched with amla, bhringraj, fenugreek, hibiscus, neem, black seeds, aloe vera, and rosemary. Strengthens roots, promotes hair growth, soothes the scalp, and is suitable for all hair types.",
-  },
-  {
-    id: "f2",
-    name: "Apricot Kernel Oil (100ml)",
-    category: "Hair Oil",
-    price: 700,
-    image: "apricot.jpg",
-    details:
-      "Lightweight oil rich in vitamins A, C, and E; nourishes the scalp, improves shine, and strengthens hair follicles. Ideal for daily use, sensitive scalps, and those seeking a non-greasy, hydrating treatment that promotes softness and reduces frizz.",
-  },
-  {
-    id: "f3",
-    name: "Natural Teeth Whitening Powder",
-    category: "Teeth Whitener",
-    price: 500,
-    image: "teeth.jpg",
-    details:
-      "Herbal formula for naturally whiter teeth without harsh chemicals, crafted with activated charcoal and gentle natural abrasives. Safe for daily use, removes stains, promotes gum health, and leaves a fresh, clean feel with a subtle mint flavor.",
-  },
-  {
-    id: "f4",
-    name: "Aloe Vera Skin Toner",
-    category: "Skin Toners",
-    price: 750,
-    image: "face-toner.jpg",
-    details:
-      "Hydrates skin and soothes irritation with a gentle, all-natural formula crafted from aloe vera, cucumber, honey, and rose water. Aloe vera calms redness, cucumber refreshes and tightens pores, honey locks in moisture, and rose water balances skin tone. Suitable for all skin types.",
-  },
-];
+let modalProduct = null;
+let testiIndex = 0;
 
-/* ===========================
-   ELEMENTS
-=========================== */
+/* ====== ELEMENTS ====== */
+// nav / theme
 const navToggle = document.getElementById("menu-toggle");
 const navLinks = document.getElementById("nav-links");
 const darkToggle = document.getElementById("darkToggle");
+
+// products toolbar & grids
 const searchInput = document.getElementById("search");
-
-const productList = document.getElementById("product-list");
+const sortSelect = document.getElementById("sort");
 const categoryButtons = document.getElementById("category-buttons");
-const skeletonGrid = document.getElementById("skeleton-grid");
+const productList = document.getElementById("product-list");
 const emptyState = document.getElementById("empty-state");
+const skels = document.getElementById("skeletons");
 
+// modal
 const modal = document.getElementById("product-modal");
 const modalClose = document.getElementById("modal-close");
 const modalImg = document.getElementById("modal-image");
@@ -81,12 +48,12 @@ const modalTitle = document.getElementById("modal-title");
 const modalDetails = document.getElementById("modal-details");
 const modalPrice = document.getElementById("modal-price");
 const modalBuy = document.getElementById("modal-buy");
-const modalAddCart = document.getElementById("modal-add-cart"); // optional
 const modalQtyWrap = document.getElementById("modal-qty");
-const modalQtyMinus = modalQtyWrap ? modalQtyWrap.querySelector(".qty-minus") : null;
-const modalQtyPlus = modalQtyWrap ? modalQtyWrap.querySelector(".qty-plus") : null;
-const modalQtySpan = modalQtyWrap ? modalQtyWrap.querySelector("span") : null;
+const modalQtyMinus = modalQtyWrap?.querySelector(".qty-minus");
+const modalQtyPlus = modalQtyWrap?.querySelector(".qty-plus");
+const modalQtySpan = modalQtyWrap?.querySelector("span");
 
+// admin
 const adminGear = document.getElementById("admin-gear");
 const adminSidebar = document.getElementById("admin-sidebar");
 const adminClose = document.getElementById("admin-close");
@@ -107,8 +74,7 @@ const inpImageFile = document.getElementById("prod-image-file");
 const inpDetails = document.getElementById("prod-details");
 const formReset = document.getElementById("form-reset");
 
-const toastContainer = document.getElementById("toast-container");
-
+// cart / wishlist
 const cartBtn = document.getElementById("cartBtn");
 const wishlistBtn = document.getElementById("wishlistBtn");
 const cartDrawer = document.getElementById("cart-drawer");
@@ -120,670 +86,745 @@ const cartClear = document.getElementById("cartClear");
 const cartCount = document.getElementById("cartCount");
 const wishlistCount = document.getElementById("wishlistCount");
 
-/* Testimonials */
+// toasts
+const toastContainer = document.getElementById("toast-container");
+
+// testimonials
 const testiTrack = document.getElementById("testiTrack");
 const testiPrev = document.getElementById("testiPrev");
 const testiNext = document.getElementById("testiNext");
 
-/* ===========================
-   THEME
-=========================== */
-(function initTheme(){
-  const saved = localStorage.getItem(THEME_KEY);
-  if(saved === "dark") document.documentElement.classList.add("dark");
+/* ====== THEME (via :root.dark) ====== */
+(function initTheme() {
+  const saved = localStorage.getItem(LS_THEME);
+  if (saved === "dark") document.documentElement.classList.add("dark");
 })();
-darkToggle && darkToggle.addEventListener("click", ()=>{
+darkToggle?.addEventListener("click", () => {
   document.documentElement.classList.toggle("dark");
-  localStorage.setItem(THEME_KEY,
+  localStorage.setItem(
+    LS_THEME,
     document.documentElement.classList.contains("dark") ? "dark" : "light"
   );
 });
 
-/* ===========================
-   NAV MOBILE TOGGLE
-=========================== */
-navToggle && navToggle.addEventListener("click", ()=> {
-  navLinks && navLinks.classList.toggle("show");
-});
-
-/* Active nav link highlight + close on click (mobile) */
-document.querySelectorAll('.nav-links a').forEach(link => {
-  link.addEventListener('click', function() {
-    document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-    this.classList.add('active');
-    navLinks && navLinks.classList.remove("show");
+/* ====== NAV ====== */
+navToggle?.addEventListener("click", () => navLinks?.classList.toggle("show"));
+[...document.querySelectorAll(".nav-links a")].forEach((a) => {
+  a.addEventListener("click", () => {
+    document.querySelectorAll(".nav-links a").forEach((x) => x.classList.remove("active"));
+    a.classList.add("active");
+    navLinks?.classList.remove("show");
   });
 });
 
-/* ===========================
-   HELPERS
-=========================== */
-function showToast(msg){
-  if(!toastContainer){
-    alert(msg);
-    return;
-  }
+/* ====== HELPERS ====== */
+function showToast(msg) {
+  if (!toastContainer) return alert(msg);
   const t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
   toastContainer.appendChild(t);
-  setTimeout(()=>{ t.remove(); }, 2600);
+  setTimeout(() => t.remove(), 2500);
 }
-function saveWishlist(){ localStorage.setItem(LS_WISHLIST, JSON.stringify(wishlist)); }
-function saveCart(){ localStorage.setItem(LS_CART, JSON.stringify(cart)); }
-function formatRs(x){ return "Rs " + Number(x||0).toLocaleString(); }
-function normalizeId(id){ return String(id); }  // ✅ prevents cart merge bug (type-safe)
+const saveProductsLocal = () => localStorage.setItem(LS_PRODUCTS, JSON.stringify(products));
+const saveWishlist = () => localStorage.setItem(LS_WISHLIST, JSON.stringify(wishlist));
+const saveCart = () => localStorage.setItem(LS_CART, JSON.stringify(cart));
+const formatRs = (x) => "Rs " + Number(x || 0).toLocaleString();
+const uniqueCategories = () =>
+  [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
+const debounce = (fn, wait = 300) => {
+  let t;
+  return (...a) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...a), wait);
+  };
+};
+const safeImg = (src) => (src ? src : "placeholder.png");
 
-/* ===========================
-   BACKEND SYNC  (with robust fallback)
-=========================== */
-async function apiGetProducts(){
-  // Try backend
-  try{
-    const res = await fetch(`${API_URL}/products?ts=${Date.now()}`, { cache: "no-store" });
-    if(!res.ok) throw new Error("Failed to load products");
+/* ====== API + FALLBACK ====== */
+async function apiGetProducts() {
+  const localSeed = JSON.parse(localStorage.getItem(LS_PRODUCTS) || "null");
+  try {
+    if (skels) skels.style.display = "grid";
+    const res = await fetch(`${API_URL}/products`, { cache: "no-store" });
+    if (!res.ok) throw new Error("API failed");
     const data = await res.json();
-
-    // Normalize IDs as string to avoid cart merge issues
-    return data.map(p => ({ ...p, id: normalizeId(p.id) }));
-  }catch(err){
-    console.warn("Backend failed, using local/fallback products.", err);
-
-    // If saved locally from previous session, prefer that
-    const localSaved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-    if(Array.isArray(localSaved) && localSaved.length){
-      return localSaved.map(p => ({ ...p, id: normalizeId(p.id) }));
-    }
-
-    // Else fallback seed
-    return FALLBACK_PRODUCTS.map(p => ({ ...p, id: normalizeId(p.id) }));
+    localStorage.setItem(LS_PRODUCTS, JSON.stringify(data));
+    return data;
+  } catch (e) {
+    console.warn("API failed, using local fallback", e);
+    if (localSeed?.length) return localSeed;
+    return [
+      {
+        id: 1,
+        name: "Marsea Herbal Oil (150 ml)",
+        category: "Hair Oil",
+        price: 800,
+        image: "marsea-oil.jpg",
+        details:
+          "100% pure herbal hair oil — coconut, castor, olive + amla, bhringraj, methi, hibiscus, neem, kalonji, aloe, rosemary."
+      },
+      {
+        id: 2,
+        name: "Apricot Kernel Oil (100 ml)",
+        category: "Hair Oil",
+        price: 700,
+        image: "apricot.jpg",
+        details: "Light, vitamin-rich oil for scalp nourishment & shine."
+      },
+      {
+        id: 3,
+        name: "Natural Teeth Whitening Powder",
+        category: "Teeth Whitener",
+        price: 500,
+        image: "teeth.jpg",
+        details: "Charcoal + gentle abrasives for stain removal."
+      },
+      {
+        id: 4,
+        name: "Aloe Vera Skin Toner",
+        category: "Skin Toners",
+        price: 750,
+        image: "face-toner.jpg",
+        details: "Aloe, cucumber, honey & rose water for hydration."
+      }
+    ];
+  } finally {
+    if (skels) skels.style.display = "none";
   }
 }
-
-async function apiCreateProduct(p){
-  const res = await fetch(`${API_URL}/products`,{
-    method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(p)
+const apiCreateProduct = (p) =>
+  fetch(`${API_URL}/products`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(p)
+  }).then((r) => {
+    if (!r.ok) throw 0;
+    return r.json();
   });
-  if(!res.ok) throw new Error("Create failed");
-  const created = await res.json();
-  return { ...created, id: normalizeId(created.id) };
-}
-async function apiUpdateProduct(id,p){
-  const res = await fetch(`${API_URL}/products/${id}`,{
-    method:"PUT", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(p)
+const apiUpdateProduct = (id, p) =>
+  fetch(`${API_URL}/products/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(p)
+  }).then((r) => {
+    if (!r.ok) throw 0;
+    return r.json();
   });
-  if(!res.ok) throw new Error("Update failed");
-  const updated = await res.json();
-  return { ...updated, id: normalizeId(updated.id) };
-}
-async function apiDeleteProduct(id){
-  const res = await fetch(`${API_URL}/products/${id}`,{ method:"DELETE" });
-  if(!res.ok) throw new Error("Delete failed");
-  return res.json();
-}
-
-/* ===========================
-   LOCAL PERSIST (fallback)
-=========================== */
-function saveProductsLocal(){
-  localStorage.setItem(LS_KEY, JSON.stringify(products));
-}
-function uniqueCategories(){
-  return [...new Set(products.map(p => p.category))].sort();
-}
-
-/* ===========================
-   CATEGORY CHIPS + DROPDOWN
-=========================== */
-function populateCategoryChips(active = "All"){
-  currentFilterCat = active;
-  if(!categoryButtons) return;
-
-  categoryButtons.innerHTML = "";
-  const baseCats = ["All", ...uniqueCategories()];
-  baseCats.forEach(cat=>{
-    const btn = document.createElement("button");
-    btn.textContent = cat;
-    btn.className = cat === active ? "active" : "";
-    btn.addEventListener("click", ()=> {
-      showWishlistOnly = false;
-      populateCategoryChips(cat);
-      renderProducts();
-    });
-    categoryButtons.appendChild(btn);
+const apiDeleteProduct = (id) =>
+  fetch(`${API_URL}/products/${id}`, { method: "DELETE" }).then((r) => {
+    if (!r.ok) throw 0;
+    return r.json();
   });
 
-  // Wishlist quick-chip (optional UX)
-  const wishBtn = document.createElement("button");
-  wishBtn.textContent = "Wishlist";
-  if(showWishlistOnly) wishBtn.classList.add("active");
-  wishBtn.addEventListener("click", ()=>{
-    showWishlistOnly = true;
-    currentFilterCat = "All";
-    populateCategoryChips("All");
-    renderProducts();
-  });
-  categoryButtons.appendChild(wishBtn);
-}
+/* ====== SEARCH ====== */
+const onSearch = debounce((v) => {
+  currentSearch = (v || "").toLowerCase();
+  renderProducts();
+}, 200);
+searchInput?.addEventListener("input", (e) => onSearch(e.target.value));
 
-function populateCategoryDropdown(){
-  if(!selCategory) return;
-  selCategory.innerHTML = '<option value="">Select a category</option>';
-  uniqueCategories().forEach(cat=>{
-    const opt = document.createElement("option");
-    opt.value = cat; opt.textContent = cat;
-    selCategory.appendChild(opt);
-  });
-}
-
-/* ===========================
-   SEARCH
-=========================== */
-searchInput && searchInput.addEventListener("input", ()=>{
-  currentSearch = (searchInput.value || "").toLowerCase();
+/* ====== SORT ====== */
+sortSelect?.addEventListener("change", () => {
+  sortMode = sortSelect.value;
   renderProducts();
 });
-
-/* ===========================
-   FILTER + SKELETONS
-=========================== */
-function filteredList(){
-  let list = products;
-
-  if(showWishlistOnly){
-    list = list.filter(p => wishlist.includes(p.id));
-  }else if(currentFilterCat !== "All"){
-    list = list.filter(p => p.category === currentFilterCat);
+function applySort(list) {
+  const L = [...list];
+  switch (sortMode) {
+    case "price-asc":
+      return L.sort((a, b) => (+a.price || 0) - (+b.price || 0));
+    case "price-desc":
+      return L.sort((a, b) => (+b.price || 0) - (+a.price || 0)).reverse();
+    case "name-asc":
+      return L.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    case "name-desc":
+      return L.sort((a, b) => String(b.name).localeCompare(String(a.name)));
+    default:
+      return L; // featured
   }
-  if(currentSearch){
-    list = list.filter(p =>
-      (p.name||"").toLowerCase().includes(currentSearch) ||
-      (p.category||"").toLowerCase().includes(currentSearch) ||
-      (p.details||"").toLowerCase().includes(currentSearch)
+}
+
+/* ====== CATEGORY CHIPS ====== */
+function populateCategoryChips(active = "All") {
+  currentFilterCat = active;
+  categoryButtons.innerHTML = "";
+  const base = ["All", ...uniqueCategories()];
+  const cats = showWishlistOnly ? ["Wishlist"] : base;
+
+  cats.forEach((cat) => {
+    const b = document.createElement("button");
+    b.textContent = cat;
+    if (cat === active) b.classList.add("active");
+    b.onclick = () => {
+      if (cat === "Wishlist") {
+        showWishlistOnly = true;
+        currentFilterCat = "All";
+      } else {
+        showWishlistOnly = false;
+        currentFilterCat = cat;
+      }
+      populateCategoryChips(showWishlistOnly ? "Wishlist" : currentFilterCat);
+      renderProducts();
+    };
+    categoryButtons.appendChild(b);
+  });
+}
+
+/* ====== PRICE CHIP (inside toolbar) ====== */
+function hookPriceChip() {
+  const chip = document.getElementById("priceChip");
+  if (!chip) return;
+  const minI = chip.querySelector(".min");
+  const maxI = chip.querySelector(".max");
+  const apply = chip.querySelector(".price-apply");
+  const clear = chip.querySelector(".price-clear");
+
+  minI.value = priceMin;
+  maxI.value = priceMax;
+
+  apply.onclick = () => {
+    priceMin = minI.value;
+    priceMax = maxI.value;
+    renderProducts();
+  };
+  clear.onclick = () => {
+    priceMin = priceMax = "";
+    minI.value = "";
+    maxI.value = "";
+    renderProducts();
+  };
+  [minI, maxI].forEach((el) =>
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") apply.click();
+    })
+  );
+}
+
+/* ====== FILTERED LIST ====== */
+function filteredList() {
+  let list = [...products];
+
+  // wishlist or category
+  if (showWishlistOnly) list = list.filter((p) => wishlist.includes(p.id));
+  else if (currentFilterCat !== "All") list = list.filter((p) => p.category === currentFilterCat);
+
+  // search
+  if (currentSearch) {
+    const s = currentSearch;
+    list = list.filter(
+      (p) =>
+        p.name?.toLowerCase().includes(s) ||
+        p.category?.toLowerCase().includes(s) ||
+        (p.details || "").toLowerCase().includes(s)
     );
   }
-  return list;
+
+  // price
+  const min = priceMin !== "" ? Number(priceMin) : null;
+  const max = priceMax !== "" ? Number(priceMax) : null;
+  if (min !== null) list = list.filter((p) => (+p.price || 0) >= min);
+  if (max !== null) list = list.filter((p) => (+p.price || 0) <= max);
+
+  return applySort(list);
 }
 
-function setSkeletons(n=6){
-  if(!skeletonGrid) return;
-  skeletonGrid.innerHTML = "";
-  for(let i=0;i<n;i++){
-    const s = document.createElement("div");
-    s.className = "skel-card";
-    s.innerHTML = `<div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div>`;
-    skeletonGrid.appendChild(s);
-  }
-}
-function clearSkeletons(){
-  if(skeletonGrid) skeletonGrid.innerHTML = "";
-}
+/* ====== RENDER PRODUCTS ====== */
+function renderProducts() {
+  hookPriceChip();
 
-/* ===========================
-   RENDER PRODUCTS
-=========================== */
-function renderProducts(){
   const list = filteredList();
-  if(!productList) return;
-
   productList.innerHTML = "";
-  if(emptyState) emptyState.style.display = list.length ? "none" : "block";
+  emptyState && (emptyState.style.display = list.length ? "none" : "block");
 
-  list.forEach((product)=>{
+  list.forEach((product) => {
     const card = document.createElement("div");
     card.className = "product-card";
-    card.setAttribute("data-id", product.id);
+    card.id = `product-${product.id}`;
 
-    card.innerHTML = `
-      <div class="card-actions" style="${isAdmin?'z-index:5;':''} ${isAdmin?'':'display:none'}">
-        <button class="edit-btn" title="Edit"><i class="fa-solid fa-pen"></i></button>
-        <button class="delete-btn danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
-      </div>
+    // IMAGE WRAP + OVERLAY
+    const imgWrap = document.createElement("div");
+    imgWrap.className = "product-image";
 
-      <div class="product-image">
-        <img src="${product.image}" alt="${product.name}">
-        <button class="wish-btn" title="Add to wishlist"><i class="fa-regular fa-heart"></i></button>
-      </div>
+    // overlay row (wishlist left, admin right)
+    const overlay = document.createElement("div");
+    overlay.className = "overlay-actions";
 
-      <h3 class="title">${product.name}</h3>
-      <div class="price">${formatRs(product.price)}</div>
+    const left = document.createElement("div");
+    left.className = "overlay-left";
 
-      <div class="quantity-control">
-        <button class="qty-minus" aria-label="Decrease">-</button>
-        <span>1</span>
-        <button class="qty-plus" aria-label="Increase">+</button>
-      </div>
+    const right = document.createElement("div");
+    right.className = "overlay-right";
 
-      <button class="buy-now">Buy on WhatsApp</button>
-    `;
+    // wishlist heart (TOP-LEFT)
+    const heart = document.createElement("button");
+    heart.className = "overlay-btn heart";
+    heart.innerHTML = '<i class="fa-regular fa-heart"></i>';
+    if (wishlist.includes(product.id)) heart.classList.add("active");
 
-    // Wishlist state + toggle
-    const wishBtn = card.querySelector(".wish-btn");
-    if(wishlist.includes(product.id)) wishBtn.classList.add("active");
-    wishBtn.addEventListener("click", ()=>{
-      if(wishlist.includes(product.id)){
-        wishlist = wishlist.filter(id => id !== product.id);
-        wishBtn.classList.remove("active");
+    heart.onclick = (e) => {
+      e.stopPropagation();
+      if (wishlist.includes(product.id)) {
+        wishlist = wishlist.filter((id) => id !== product.id);
+        heart.classList.remove("active");
         showToast("Removed from wishlist");
-      }else{
+      } else {
         wishlist.push(product.id);
-        wishBtn.classList.add("active");
+        heart.classList.add("active");
         showToast("Added to wishlist");
       }
       saveWishlist();
       updateBadges();
-      if(showWishlistOnly) renderProducts();
-    });
+      if (showWishlistOnly) renderProducts();
+    };
+    left.appendChild(heart);
 
-    // Image fallback
-    const img = card.querySelector("img");
-    img.addEventListener("error", ()=>{
-      img.src = "placeholder.png";
-      img.alt = product.name + " (image missing)";
-    });
+    // admin edit/delete (TOP-RIGHT)
+    if (isAdmin) {
+      const edit = document.createElement("button");
+      edit.className = "overlay-btn";
+      edit.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      edit.title = "Edit";
 
-    // Open modal on image/title click
-    card.querySelector(".product-image").addEventListener("click", ()=> showDetails(product));
-    card.querySelector(".title").addEventListener("click", ()=> showDetails(product));
+      const del = document.createElement("button");
+      del.className = "overlay-btn danger";
+      del.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      del.title = "Delete";
 
-    // Quantity controls
-    const qtySpan = card.querySelector(".quantity-control span");
-    card.querySelector(".qty-minus").addEventListener("click", ()=>{
-      qtySpan.textContent = Math.max(1, parseInt(qtySpan.textContent) - 1);
-    });
-    card.querySelector(".qty-plus").addEventListener("click", ()=>{
-      qtySpan.textContent = parseInt(qtySpan.textContent) + 1;
-    });
-
-    // Buy on WhatsApp from card
-    card.querySelector(".buy-now").addEventListener("click", ()=>{
-      const qty = parseInt(qtySpan.textContent);
-      const message = `Hello, I want to buy ${qty} x ${product.name} for Rs ${product.price * qty}`;
-      window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`, "_blank");
-    });
-
-    // Admin actions
-    const editBtn = card.querySelector(".edit-btn");
-    const delBtn = card.querySelector(".delete-btn");
-    if(editBtn){
-      editBtn.addEventListener("click", ()=> startEdit(product));
-    }
-    if(delBtn){
-      delBtn.addEventListener("click", async ()=>{
-        if(confirm(`Delete "${product.name}"?`)){
-          try{
-            await apiDeleteProduct(product.id);
-            products = products.filter(p => p.id !== product.id);
-            saveProductsLocal();
-            populateCategoryChips(currentFilterCat);
-            renderProducts();
-            populateCategoryDropdown();
-            showToast("Product deleted");
-          }catch(e){
-            console.error(e);
-            showToast("Delete failed (server). Removing locally.");
-            // Local remove if server not reachable
-            products = products.filter(p => p.id !== product.id);
-            saveProductsLocal();
-            populateCategoryChips(currentFilterCat);
-            renderProducts();
-            populateCategoryDropdown();
-          }
+      edit.onclick = (e) => {
+        e.stopPropagation();
+        startEdit(product);
+      };
+      del.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete "${product.name}"?`)) return;
+        try {
+          await apiDeleteProduct(product.id);
+          products = products.filter((p) => p.id !== product.id);
+          saveProductsLocal();
+          populateCategoryChips(currentFilterCat);
+          renderProducts();
+          populateCategoryDropdown();
+          showToast("Product deleted");
+        } catch (err) {
+          console.error(err);
+          showToast("Delete failed");
         }
-      });
+      };
+      right.append(edit, del);
     }
 
+    overlay.append(left, right);
+
+    // image
+    const img = document.createElement("img");
+    img.src = safeImg(product.image);
+    img.alt = product.name;
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.onerror = () => {
+      img.src = "placeholder.png";
+    };
+
+    imgWrap.append(overlay, img);
+    imgWrap.onclick = () => showDetails(product);
+
+    // CONTENT
+    const content = document.createElement("div");
+
+    const h3 = document.createElement("h3");
+    h3.textContent = product.name;
+    h3.className = "title";
+    h3.onclick = () => showDetails(product);
+
+    const price = document.createElement("div");
+    price.className = "price";
+    price.textContent = formatRs(product.price);
+
+    // qty
+    const qty = document.createElement("div");
+    qty.className = "quantity-control";
+    const minus = document.createElement("button");
+    minus.className = "qty-minus";
+    minus.textContent = "-";
+    const val = document.createElement("span");
+    val.textContent = "1";
+    const plus = document.createElement("button");
+    plus.className = "qty-plus";
+    plus.textContent = "+";
+    minus.onclick = () => {
+      val.textContent = String(Math.max(1, +val.textContent - 1));
+    };
+    plus.onclick = () => {
+      val.textContent = String(+val.textContent + 1);
+    };
+    qty.append(minus, val, plus);
+
+    // actions row
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const add = document.createElement("button");
+    add.className = "btn btn-ghost";
+    add.textContent = "Add to Cart";
+
+    const buy = document.createElement("button");
+    buy.className = "btn btn-primary";
+    buy.textContent = "Buy on WhatsApp";
+
+    add.onclick = () => {
+      addToCart(product, +val.textContent);
+      renderCart();
+      updateBadges();
+      showToast("Added to cart");
+    };
+
+    buy.onclick = () => {
+      const q = +val.textContent;
+      const msg = `Hello, I want to buy ${q} x ${product.name} for Rs ${product.price * q}`;
+      window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
+    };
+
+    actions.append(add, buy);
+
+    content.append(h3, price, qty, actions);
+    card.append(imgWrap, content);
     productList.appendChild(card);
   });
 }
 
-/* ===========================
-   MODAL
-=========================== */
-let modalProduct = null;
-
-function showDetails(product){
-  modalProduct = product;
-  if(modalImg) modalImg.src = product.image;
-  if(modalTitle) modalTitle.textContent = product.name;
-  if(modalDetails) modalDetails.textContent = product.details;
-  if(modalPrice) modalPrice.textContent = formatRs(product.price);
-  if(modalQtySpan) modalQtySpan.textContent = "1";
-  if(modal){
-    modal.style.display = "flex";
-    modal.setAttribute("aria-hidden", "false");
-  }
+/* ====== MODAL ====== */
+function showDetails(p) {
+  modalProduct = p;
+  modalImg.src = safeImg(p.image);
+  modalImg.alt = p.name;
+  modalTitle.textContent = p.name;
+  modalDetails.textContent = p.details || "";
+  modalPrice.textContent = formatRs(p.price);
+  if (modalQtySpan) modalQtySpan.textContent = "1";
+  modal.style.display = "flex";
+  modal.setAttribute("aria-hidden", "false");
 }
-function closeModal(){
-  if(!modal) return;
+function closeModal() {
   modal.style.display = "none";
   modal.setAttribute("aria-hidden", "true");
   modalProduct = null;
 }
-modalClose && modalClose.addEventListener("click", closeModal);
-window.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
-window.addEventListener("keydown", (e)=>{ if(e.key === "Escape") closeModal(); });
-
-// modal qty + buy + add-to-cart
-modalQtyMinus && modalQtyMinus.addEventListener("click", ()=>{
-  modalQtySpan.textContent = Math.max(1, parseInt(modalQtySpan.textContent) - 1);
+modalClose?.addEventListener("click", closeModal);
+window.addEventListener("click", (e) => {
+  if (e.target === modal) closeModal();
 });
-modalQtyPlus && modalQtyPlus.addEventListener("click", ()=>{
-  modalQtySpan.textContent = parseInt(modalQtySpan.textContent) + 1;
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
 });
-modalBuy && modalBuy.addEventListener("click", ()=>{
-  if(!modalProduct) return;
-  const qty = parseInt(modalQtySpan.textContent);
-  const message = `Hello, I want to buy ${qty} x ${modalProduct.name} for Rs ${modalProduct.price * qty}`;
-  window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`, "_blank");
+modalQtyMinus?.addEventListener("click", () => {
+  modalQtySpan.textContent = String(Math.max(1, +modalQtySpan.textContent - 1));
 });
-modalAddCart && modalAddCart.addEventListener("click", ()=>{
-  if(!modalProduct) return;
-  const qty = parseInt(modalQtySpan.textContent);
-  addToCart(modalProduct, qty);
-  showToast("Added to cart");
-  updateBadges();
-  renderCart();
+modalQtyPlus?.addEventListener("click", () => {
+  modalQtySpan.textContent = String(+modalQtySpan.textContent + 1);
+});
+modalBuy?.addEventListener("click", () => {
+  if (!modalProduct) return;
+  const q = +modalQtySpan.textContent;
+  const msg = `Hello, I want to buy ${q} x ${modalProduct.name} for Rs ${modalProduct.price * q}`;
+  window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
 });
 
-/* ===========================
-   ADMIN SIDEBAR
-=========================== */
-adminGear && adminGear.addEventListener("click", ()=>{
-  if(!adminSidebar) return;
-  adminSidebar.classList.add("open");
-  adminSidebar.setAttribute("aria-hidden","false");
-  refreshAdminUI();
-});
-adminClose && adminClose.addEventListener("click", ()=>{
-  adminSidebar && adminSidebar.classList.remove("open");
-  adminSidebar && adminSidebar.setAttribute("aria-hidden","true");
-});
-document.addEventListener("keydown", (e)=>{
-  if(e.key === "Escape") {
-    adminSidebar && adminSidebar.classList.remove("open");
-    adminSidebar && adminSidebar.setAttribute("aria-hidden","true");
-  }
-});
-function refreshAdminUI(){
-  if(!adminLoginWrap || !productForm || !adminActionSection) return;
-  if(isAdmin){
+/* ====== ADMIN ====== */
+function refreshAdminUI() {
+  if (isAdmin) {
     adminLoginWrap.style.display = "none";
     productForm.style.display = "flex";
     adminActionSection.style.display = "block";
-    document.querySelectorAll(".card-actions").forEach(el => el.style.display = "flex");
-  }else{
+  } else {
     adminLoginWrap.style.display = "flex";
     productForm.style.display = "none";
     adminActionSection.style.display = "none";
-    document.querySelectorAll(".card-actions").forEach(el => el.style.display = "none");
   }
+  // re-render so edit/delete overlay appears/disappears
+  renderProducts();
 }
-adminLoginBtn && adminLoginBtn.addEventListener("click", ()=>{
-  const val = (adminPass.value || "").trim();
-  if(val === ADMIN_PASSWORD){
+adminGear?.addEventListener("click", () => {
+  adminSidebar.classList.add("open");
+  adminSidebar.setAttribute("aria-hidden", "false");
+  refreshAdminUI();
+});
+adminClose?.addEventListener("click", () => {
+  adminSidebar.classList.remove("open");
+  adminSidebar.setAttribute("aria-hidden", "true");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    adminSidebar.classList.remove("open");
+    adminSidebar.setAttribute("aria-hidden", "true");
+  }
+});
+
+adminLoginBtn?.addEventListener("click", () => {
+  if ((adminPass.value || "").trim() === ADMIN_PASSWORD) {
     isAdmin = true;
-    localStorage.setItem(ADMIN_KEY, "true");
+    localStorage.setItem(LS_ADMIN, "true");
     adminPass.value = "";
     refreshAdminUI();
     showToast("Admin mode ON");
-  }else{
-    alert("Incorrect password!");
-  }
+  } else alert("Incorrect password!");
 });
-adminExitBtn && adminExitBtn.addEventListener("click", ()=>{
+adminExitBtn?.addEventListener("click", () => {
   isAdmin = false;
-  localStorage.setItem(ADMIN_KEY, "false");
+  localStorage.setItem(LS_ADMIN, "false");
   refreshAdminUI();
   showToast("Admin mode OFF");
 });
 
-/* ===========================
-   ADD / EDIT PRODUCT (CRUD)
-=========================== */
+function populateCategoryDropdown() {
+  selCategory.innerHTML = `<option value="">Select a category</option>`;
+  uniqueCategories().forEach((cat) => {
+    const o = document.createElement("option");
+    o.value = cat;
+    o.textContent = cat;
+    selCategory.appendChild(o);
+  });
+}
+
 let editingId = null;
-
-productForm && productForm.addEventListener("submit", async (e)=>{
+productForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  if(!isAdmin){ alert("Login as admin first."); return; }
+  if (!isAdmin) return alert("Login as admin first.");
 
-  const idVal = inpId && inpId.value ? normalizeId(inpId.value) : null;
+  const idVal = inpId.value ? +inpId.value : null;
   const name = (inpName.value || "").trim();
-  const categorySelect = (selCategory && selCategory.value) || "";
+  const categorySelect = selCategory.value;
   const newCategory = (inpNewCategory.value || "").trim();
   const price = parseFloat(inpPrice.value);
   const details = (inpDetails.value || "").trim();
   const url = (inpImageURL.value || "").trim();
-  const file = inpImageFile && inpImageFile.files ? inpImageFile.files[0] : null;
+  const file = inpImageFile.files[0];
 
-  if(!name || (!categorySelect && !newCategory) || isNaN(price) || !details || (!url && !file)){
-    alert("Fill all required fields and provide an image (filename/URL or upload).");
-    return;
-  }
+  if (!name || (!categorySelect && !newCategory) || isNaN(price) || !details || (!url && !file))
+    return alert("Fill all fields and image.");
+
   const category = newCategory || categorySelect;
 
-  // Allow simple filenames or full URLs; if file provided, store as base64
   let imageData = url;
-  if(file){
-    imageData = await fileToBase64(file);
-  }
+  if (file) imageData = await fileToBase64(file);
 
   const payload = { name, category, price, image: imageData, details };
 
-  try{
-    if(idVal || editingId){
-      const idToUse = idVal || editingId;
-      const updated = await apiUpdateProduct(idToUse, payload);
-      const idx = products.findIndex(p=> p.id === idToUse);
-      if(idx !== -1) products[idx] = updated;
+  try {
+    if (idVal || editingId) {
+      const id = idVal || editingId;
+      const updated = await apiUpdateProduct(id, payload);
+      const idx = products.findIndex((p) => p.id === id);
+      if (idx > -1) products[idx] = updated;
       showToast("Product updated");
-    }else{
+    } else {
       const created = await apiCreateProduct(payload);
       products.push(created);
       showToast("Product added");
     }
     saveProductsLocal();
     productForm.reset();
-    if(inpId) inpId.value = "";
-    if(selCategory) selCategory.value = "";
-    if(inpNewCategory) inpNewCategory.value = "";
-
+    inpId.value = "";
+    selCategory.value = "";
+    inpNewCategory.value = "";
     populateCategoryDropdown();
     populateCategoryChips(currentFilterCat);
     renderProducts();
-  }catch(err){
+  } catch (err) {
     console.error(err);
-    alert("Save failed. Please try again.");
+    alert("Save failed (API).");
   }
 });
-
-formReset && formReset.addEventListener("click", ()=>{
+formReset?.addEventListener("click", () => {
   editingId = null;
-  productForm && productForm.reset();
-  if(inpId) inpId.value = "";
-  if(selCategory) selCategory.value = "";
+  productForm.reset();
+  inpId.value = "";
+  selCategory.value = "";
 });
+function startEdit(p) {
+  editingId = p.id;
+  inpId.value = p.id;
+  inpName.value = p.name;
+  inpPrice.value = p.price;
+  inpDetails.value = p.details;
 
-function startEdit(product){
-  editingId = product.id;
-  if(inpId) inpId.value = product.id;
-  if(inpName) inpName.value = product.name;
-  if(inpPrice) inpPrice.value = product.price;
-  if(inpDetails) inpDetails.value = product.details;
-
-  if(uniqueCategories().includes(product.category)){
-    if(selCategory) selCategory.value = product.category;
-    if(inpNewCategory) inpNewCategory.value = "";
-  }else{
-    if(selCategory) selCategory.value = "";
-    if(inpNewCategory) inpNewCategory.value = product.category;
+  if (uniqueCategories().includes(p.category)) {
+    selCategory.value = p.category;
+    inpNewCategory.value = "";
+  } else {
+    selCategory.value = "";
+    inpNewCategory.value = p.category;
   }
-  if(inpImageURL) inpImageURL.value = product.image && !String(product.image).startsWith("data:") ? product.image : "";
+  inpImageURL.value = p.image && !String(p.image).startsWith("data:") ? p.image : "";
 
-  adminSidebar && adminSidebar.classList.add("open");
+  adminSidebar.classList.add("open");
   refreshAdminUI();
 }
-
-function fileToBase64(file){
-  return new Promise((resolve, reject)=>{
-    const reader = new FileReader();
-    reader.onload = e => resolve(e.target.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = (e) => res(e.target.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
   });
 }
 
-/* ===========================
-   CART
-=========================== */
-function addToCart(product, qty=1){
-  const pid = normalizeId(product.id);
-  const existing = cart.find(i => normalizeId(i.id) === pid);
-  if(existing){
-    existing.qty += qty;
-  }else{
-    cart.push({ id: pid, name: product.name, price: product.price, image: product.image, qty });
-  }
+/* ====== CART ====== */
+function addToCart(p, qty = 1) {
+  const ex = cart.find((i) => i.id === p.id);
+  if (ex) ex.qty += qty;
+  else cart.push({ id: p.id, name: p.name, price: p.price, image: p.image, qty });
   saveCart();
 }
-function removeFromCart(id){
-  const pid = normalizeId(id);
-  cart = cart.filter(i => normalizeId(i.id) !== pid);
+function removeFromCart(id) {
+  cart = cart.filter((i) => i.id !== id);
   saveCart();
 }
-function updateCartQty(id, delta){
-  const pid = normalizeId(id);
-  const item = cart.find(i => normalizeId(i.id) === pid);
-  if(!item) return;
-  item.qty = Math.max(1, item.qty + delta);
+function updateCartQty(id, delta) {
+  const it = cart.find((i) => i.id === id);
+  if (!it) return;
+  it.qty = Math.max(1, it.qty + delta);
   saveCart();
 }
-function cartTotal(){
-  return cart.reduce((sum,i)=> sum + (i.price * i.qty), 0);
-}
-function renderCart(){
-  if(!cartItems || !cartSubtotal) return;
+const cartTotal = () => cart.reduce((s, i) => s + i.price * i.qty, 0);
 
+function renderCart() {
+  // Use classes that match CSS: .cart-item grid, img capped.
   cartItems.innerHTML = "";
-  if(cart.length === 0){
-    cartItems.innerHTML = `<div class="empty">Your cart is empty.</div>`;
-  }else{
-    cart.forEach(item=>{
+  if (!cart.length) {
+    cartItems.innerHTML = '<div class="empty">Your cart is empty.</div>';
+  } else {
+    cart.forEach((it) => {
       const row = document.createElement("div");
-      row.className = "cart-row";
+      row.className = "cart-item";
       row.innerHTML = `
-        <img src="${item.image}" alt="${item.name}" onerror="this.src='placeholder.png'">
+        <img src="${safeImg(it.image)}" alt="${it.name}" onerror="this.src='placeholder.png'">
         <div class="cart-info">
-          <div class="cart-title">${item.name}</div>
-          <div class="cart-price">${formatRs(item.price)}</div>
-          <div class="quantity-control sm">
-            <button class="c-minus">-</button>
-            <span>${item.qty}</span>
-            <button class="c-plus">+</button>
-          </div>
+          <div class="title">${it.name}</div>
+          <div class="price">${formatRs(it.price)}</div>
         </div>
-        <button class="c-remove" title="Remove">&times;</button>
+        <div class="qty">
+          <button class="c-minus" aria-label="Decrease">-</button>
+          <span>${it.qty}</span>
+          <button class="c-plus" aria-label="Increase">+</button>
+        </div>
+        <button class="rm" title="Remove">&times;</button>
       `;
-      row.querySelector(".c-minus").addEventListener("click", ()=>{
-        updateCartQty(item.id, -1); renderCart(); updateBadges();
-      });
-      row.querySelector(".c-plus").addEventListener("click", ()=>{
-        updateCartQty(item.id, +1); renderCart(); updateBadges();
-      });
-      row.querySelector(".c-remove").addEventListener("click", ()=>{
-        removeFromCart(item.id); renderCart(); updateBadges();
-      });
+
+      row.querySelector(".c-minus").onclick = () => {
+        updateCartQty(it.id, -1);
+        renderCart();
+        updateBadges();
+      };
+      row.querySelector(".c-plus").onclick = () => {
+        updateCartQty(it.id, 1);
+        renderCart();
+        updateBadges();
+      };
+      row.querySelector(".rm").onclick = () => {
+        removeFromCart(it.id);
+        renderCart();
+        updateBadges();
+      };
       cartItems.appendChild(row);
     });
   }
   cartSubtotal.textContent = formatRs(cartTotal());
 }
-function openCart(){ cartDrawer && cartDrawer.classList.add("open"); }
-function closeCart(){ cartDrawer && cartDrawer.classList.remove("open"); }
-
-cartBtn && cartBtn.addEventListener("click", ()=>{ renderCart(); openCart(); });
-cartClose && cartClose.addEventListener("click", closeCart);
-cartClear && cartClear.addEventListener("click", ()=>{
-  if(cart.length && confirm("Clear cart?")){
+const openCart = () => cartDrawer.classList.add("open");
+const closeCart = () => cartDrawer.classList.remove("open");
+cartBtn?.addEventListener("click", () => {
+  renderCart();
+  openCart();
+});
+cartClose?.addEventListener("click", closeCart);
+cartClear?.addEventListener("click", () => {
+  if (cart.length && confirm("Clear cart?")) {
     cart = [];
     saveCart();
     renderCart();
     updateBadges();
   }
 });
-cartCheckout && cartCheckout.addEventListener("click", ()=>{
-  if(!cart.length) return;
-  const lines = cart.map(i => `• ${i.qty} x ${i.name} — Rs ${i.price * i.qty}`);
-  const total = cartTotal();
-  const msg = `Hello! I want to order:\n${lines.join("\n")}\n\nTotal: Rs ${total}`;
+cartCheckout?.addEventListener("click", () => {
+  if (!cart.length) return;
+  const lines = cart.map((i) => `• ${i.qty} x ${i.name} — Rs ${i.price * i.qty}`);
+  const msg = `Hello! I want to order:\n${lines.join("\n")}\n\nTotal: Rs ${cartTotal()}`;
   window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
 });
 
-/* ===========================
-   WISHLIST
-=========================== */
-wishlistBtn && wishlistBtn.addEventListener("click", ()=>{
+/* ====== WISHLIST TOGGLE ====== */
+wishlistBtn?.addEventListener("click", () => {
   showWishlistOnly = !showWishlistOnly;
-  if(showWishlistOnly){
-    showToast("Showing Wishlist");
-    currentFilterCat = "All";
-  }else{
-    showToast("Showing All Products");
-  }
-  populateCategoryChips(currentFilterCat);
+  showToast(showWishlistOnly ? "Showing Wishlist" : "Showing All Products");
+  currentFilterCat = "All";
+  populateCategoryChips(showWishlistOnly ? "Wishlist" : "All");
   renderProducts();
 });
-function updateBadges(){
-  const cartQty = cart.reduce((a,b)=> a + b.qty, 0);
-  if(cartCount) cartCount.textContent = cartQty;
-  if(wishlistCount) wishlistCount.textContent = wishlist.length;
+function updateBadges() {
+  const cartQty = cart.reduce((a, b) => a + b.qty, 0);
+  if (cartCount) cartCount.textContent = String(cartQty);
+  if (wishlistCount) wishlistCount.textContent = String(wishlist.length);
 }
 
-/* ===========================
-   TESTIMONIALS SLIDER
-=========================== */
-let testiIndex = 0;
-function slideTestimonials(dir){
-  if(!testiTrack) return;
+/* ====== TESTIMONIALS SLIDER ====== */
+function slideTestimonials(d) {
+  if (!testiTrack) return;
   const cards = testiTrack.querySelectorAll(".testi-card");
-  if(!cards.length) return;
-  testiIndex = (testiIndex + dir + cards.length) % cards.length;
-  const w = cards[0].offsetWidth + 16; // gap
+  if (!cards.length) return;
+  testiIndex = (testiIndex + d + cards.length) % cards.length;
+  const w = cards[0].offsetWidth + 16;
   testiTrack.style.transform = `translateX(${-testiIndex * w}px)`;
 }
-testiPrev && testiPrev.addEventListener("click", ()=> slideTestimonials(-1));
-testiNext && testiNext.addEventListener("click", ()=> slideTestimonials(+1));
-setInterval(()=> slideTestimonials(1), 6000);
+testiPrev?.addEventListener("click", () => slideTestimonials(-1));
+testiNext?.addEventListener("click", () => slideTestimonials(+1));
+setInterval(() => slideTestimonials(1), 6000);
 
-/* ===========================
-   INIT
-=========================== */
-async function init(){
-  try{
-    setSkeletons();
+/* ====== SCROLL FADE-IN ====== */
+document.addEventListener("scroll", () => {
+  document.querySelectorAll(".fade-in").forEach((s) => {
+    const t = s.getBoundingClientRect().top;
+    if (t < window.innerHeight - 100) s.classList.add("show");
+  });
+});
+document.dispatchEvent(new Event("scroll"));
+
+/* ====== DEEP LINK (scroll to product-{id}) ====== */
+window.addEventListener("hashchange", () => {
+  const id = location.hash.replace("#product-", "");
+  if (id) {
+    const el = document.getElementById(`product-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.classList.add("pulse");
+      setTimeout(() => el.classList.remove("pulse"), 1000);
+    }
+  }
+});
+
+/* ====== INIT ====== */
+async function init() {
+  try {
     products = await apiGetProducts();
-    saveProductsLocal(); // cache for fallback
-  }catch(e){
+    saveProductsLocal();
+  } catch (e) {
     console.error(e);
-  }finally{
-    clearSkeletons();
   }
   populateCategoryDropdown();
   populateCategoryChips("All");
+  hookPriceChip();
   renderProducts();
   refreshAdminUI();
   updateBadges();
-
-  // Fade-in on scroll
-  document.addEventListener("scroll", () => {
-    document.querySelectorAll(".fade-in").forEach(section => {
-      const sectionTop = section.getBoundingClientRect().top;
-      const windowHeight = window.innerHeight;
-      if (sectionTop < windowHeight - 100) {
-        section.classList.add("show");
-      }
-    });
-  });
-  document.dispatchEvent(new Event("scroll"));
 }
 init();
+
+/* ====== Tiny utilities for DX (optional) ====== */
+// Expose for debugging
+window.__store = {
+  get products() { return products; },
+  get cart() { return cart; },
+  get wishlist() { return wishlist; },
+  clearCart() { cart = []; saveCart(); renderCart(); updateBadges(); },
+  clearWishlist() { wishlist = []; saveWishlist(); updateBadges(); renderProducts(); }
+};
