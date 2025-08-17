@@ -1,7 +1,7 @@
 /* ===========================
    CONFIG / STATE
 =========================== */
-const API_URL = "https://herbalbackend-production.up.railway.app"; // backend base
+const API_URL = "https://herbalbackend-production.up.railway.app"; // ✅ your backend base
 const WA_NUMBER = "923115121207";
 
 const LS_KEY = "products_v2";
@@ -16,10 +16,50 @@ let products = [];
 let isAdmin = localStorage.getItem(ADMIN_KEY) === "true";
 let currentFilterCat = "All";
 let currentSearch = "";
-
-let wishlist = JSON.parse(localStorage.getItem(LS_WISHLIST) || "[]");
-let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");
 let showWishlistOnly = false;
+
+let wishlist = JSON.parse(localStorage.getItem(LS_WISHLIST) || "[]");          // [id, id, ...]
+let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");                  // [{id,name,price,image,qty}]
+
+/* --- Local fallback products (used only when backend fails) --- */
+const FALLBACK_PRODUCTS = [
+  {
+    id: "f1",
+    name: "Marsea Herbal Oil (150 ml)",
+    category: "Hair Oil",
+    price: 800,
+    image: "marsea-oil.jpg",
+    details:
+      "100% pure herbal hair oil, crafted with coconut oil, castor oil, and olive oil, enriched with amla, bhringraj, fenugreek, hibiscus, neem, black seeds, aloe vera, and rosemary. Strengthens roots, promotes hair growth, soothes the scalp, and is suitable for all hair types.",
+  },
+  {
+    id: "f2",
+    name: "Apricot Kernel Oil (100ml)",
+    category: "Hair Oil",
+    price: 700,
+    image: "apricot.jpg",
+    details:
+      "Lightweight oil rich in vitamins A, C, and E; nourishes the scalp, improves shine, and strengthens hair follicles. Ideal for daily use, sensitive scalps, and those seeking a non-greasy, hydrating treatment that promotes softness and reduces frizz.",
+  },
+  {
+    id: "f3",
+    name: "Natural Teeth Whitening Powder",
+    category: "Teeth Whitener",
+    price: 500,
+    image: "teeth.jpg",
+    details:
+      "Herbal formula for naturally whiter teeth without harsh chemicals, crafted with activated charcoal and gentle natural abrasives. Safe for daily use, removes stains, promotes gum health, and leaves a fresh, clean feel with a subtle mint flavor.",
+  },
+  {
+    id: "f4",
+    name: "Aloe Vera Skin Toner",
+    category: "Skin Toners",
+    price: 750,
+    image: "face-toner.jpg",
+    details:
+      "Hydrates skin and soothes irritation with a gentle, all-natural formula crafted from aloe vera, cucumber, honey, and rose water. Aloe vera calms redness, cucumber refreshes and tightens pores, honey locks in moisture, and rose water balances skin tone. Suitable for all skin types.",
+  },
+];
 
 /* ===========================
    ELEMENTS
@@ -41,11 +81,11 @@ const modalTitle = document.getElementById("modal-title");
 const modalDetails = document.getElementById("modal-details");
 const modalPrice = document.getElementById("modal-price");
 const modalBuy = document.getElementById("modal-buy");
-const modalAddCart = document.getElementById("modal-add-cart");
+const modalAddCart = document.getElementById("modal-add-cart"); // optional
 const modalQtyWrap = document.getElementById("modal-qty");
-const modalQtyMinus = modalQtyWrap.querySelector(".qty-minus");
-const modalQtyPlus = modalQtyWrap.querySelector(".qty-plus");
-const modalQtySpan = modalQtyWrap.querySelector("span");
+const modalQtyMinus = modalQtyWrap ? modalQtyWrap.querySelector(".qty-minus") : null;
+const modalQtyPlus = modalQtyWrap ? modalQtyWrap.querySelector(".qty-plus") : null;
+const modalQtySpan = modalQtyWrap ? modalQtyWrap.querySelector("span") : null;
 
 const adminGear = document.getElementById("admin-gear");
 const adminSidebar = document.getElementById("admin-sidebar");
@@ -92,7 +132,7 @@ const testiNext = document.getElementById("testiNext");
   const saved = localStorage.getItem(THEME_KEY);
   if(saved === "dark") document.documentElement.classList.add("dark");
 })();
-darkToggle.addEventListener("click", ()=>{
+darkToggle && darkToggle.addEventListener("click", ()=>{
   document.documentElement.classList.toggle("dark");
   localStorage.setItem(THEME_KEY,
     document.documentElement.classList.contains("dark") ? "dark" : "light"
@@ -102,14 +142,16 @@ darkToggle.addEventListener("click", ()=>{
 /* ===========================
    NAV MOBILE TOGGLE
 =========================== */
-navToggle.addEventListener("click", ()=> {
-  navLinks.classList.toggle("show");
+navToggle && navToggle.addEventListener("click", ()=> {
+  navLinks && navLinks.classList.toggle("show");
 });
+
+/* Active nav link highlight + close on click (mobile) */
 document.querySelectorAll('.nav-links a').forEach(link => {
   link.addEventListener('click', function() {
     document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
     this.classList.add('active');
-    navLinks.classList.remove("show");
+    navLinks && navLinks.classList.remove("show");
   });
 });
 
@@ -117,6 +159,10 @@ document.querySelectorAll('.nav-links a').forEach(link => {
    HELPERS
 =========================== */
 function showToast(msg){
+  if(!toastContainer){
+    alert(msg);
+    return;
+  }
   const t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
@@ -126,59 +172,49 @@ function showToast(msg){
 function saveWishlist(){ localStorage.setItem(LS_WISHLIST, JSON.stringify(wishlist)); }
 function saveCart(){ localStorage.setItem(LS_CART, JSON.stringify(cart)); }
 function formatRs(x){ return "Rs " + Number(x||0).toLocaleString(); }
+function normalizeId(id){ return String(id); }  // ✅ prevents cart merge bug (type-safe)
 
 /* ===========================
-   BACKEND SYNC
+   BACKEND SYNC  (with robust fallback)
 =========================== */
 async function apiGetProducts(){
+  // Try backend
   try{
-    const res = await fetch(`${API_URL}/products`, { cache: "no-store" });
-    if(!res.ok) throw new Error("Failed");
-    return await res.json();
+    const res = await fetch(`${API_URL}/products?ts=${Date.now()}`, { cache: "no-store" });
+    if(!res.ok) throw new Error("Failed to load products");
+    const data = await res.json();
+
+    // Normalize IDs as string to avoid cart merge issues
+    return data.map(p => ({ ...p, id: normalizeId(p.id) }));
   }catch(err){
-    console.error(err);
-    showToast("Failed to load products, showing local items.");
-    return JSON.parse(localStorage.getItem(LS_KEY)) || [
-      {
-        id: "p1",
-        name: "Marsea Herbal Oil (150 ml)",
-        category: "Hair Oil",
-        price: 800,
-        image: "marsea-oil.jpg",
-        details: "100% pure herbal hair oil, crafted with coconut oil, castor oil, and olive oil, enriched with amla, bhringraj, fenugreek, hibiscus, neem, black seeds, aloe vera, and rosemary. Strengthens roots, promotes hair growth, soothes the scalp, and is suitable for all hair types."
-      },
-      {
-        id: "p2",
-        name: "Apricot Kernel Oil (100ml)",
-        category: "Hair Oil",
-        price: 700,
-        image: "apricot.jpg",
-        details: "Lightweight oil rich in vitamins A, C, and E; nourishes the scalp, improves shine, and strengthens hair follicles."
-      },
-      {
-        id: "p3",
-        name: "Natural Teeth Whitening Powder",
-        category: "Teeth Whitener",
-        price: 500,
-        image: "teeth.jpg",
-        details: "Herbal formula for naturally whiter teeth without harsh chemicals."
-      }
-    ];
+    console.warn("Backend failed, using local/fallback products.", err);
+
+    // If saved locally from previous session, prefer that
+    const localSaved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+    if(Array.isArray(localSaved) && localSaved.length){
+      return localSaved.map(p => ({ ...p, id: normalizeId(p.id) }));
+    }
+
+    // Else fallback seed
+    return FALLBACK_PRODUCTS.map(p => ({ ...p, id: normalizeId(p.id) }));
   }
 }
+
 async function apiCreateProduct(p){
   const res = await fetch(`${API_URL}/products`,{
     method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(p)
   });
   if(!res.ok) throw new Error("Create failed");
-  return res.json();
+  const created = await res.json();
+  return { ...created, id: normalizeId(created.id) };
 }
 async function apiUpdateProduct(id,p){
   const res = await fetch(`${API_URL}/products/${id}`,{
     method:"PUT", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(p)
   });
   if(!res.ok) throw new Error("Update failed");
-  return res.json();
+  const updated = await res.json();
+  return { ...updated, id: normalizeId(updated.id) };
 }
 async function apiDeleteProduct(id){
   const res = await fetch(`${API_URL}/products/${id}`,{ method:"DELETE" });
@@ -201,34 +237,37 @@ function uniqueCategories(){
 =========================== */
 function populateCategoryChips(active = "All"){
   currentFilterCat = active;
-  categoryButtons.innerHTML = "";
-  const base = ["All", ...uniqueCategories()];
-  const cats = showWishlistOnly ? ["Wishlist"] : base;
+  if(!categoryButtons) return;
 
-  cats.forEach(cat=>{
+  categoryButtons.innerHTML = "";
+  const baseCats = ["All", ...uniqueCategories()];
+  baseCats.forEach(cat=>{
     const btn = document.createElement("button");
     btn.textContent = cat;
     btn.className = cat === active ? "active" : "";
     btn.addEventListener("click", ()=> {
-      if(cat === "Wishlist"){
-        showWishlistOnly = true;
-        currentFilterCat = "All";
-      }else{
-        showWishlistOnly = false;
-        populateCategoryChips(cat);
-      }
+      showWishlistOnly = false;
+      populateCategoryChips(cat);
       renderProducts();
     });
     categoryButtons.appendChild(btn);
   });
 
-  if(!showWishlistOnly){
-    [...categoryButtons.children].forEach(b=>{
-      if(b.textContent === active) b.classList.add("active");
-    });
-  }
+  // Wishlist quick-chip (optional UX)
+  const wishBtn = document.createElement("button");
+  wishBtn.textContent = "Wishlist";
+  if(showWishlistOnly) wishBtn.classList.add("active");
+  wishBtn.addEventListener("click", ()=>{
+    showWishlistOnly = true;
+    currentFilterCat = "All";
+    populateCategoryChips("All");
+    renderProducts();
+  });
+  categoryButtons.appendChild(wishBtn);
 }
+
 function populateCategoryDropdown(){
+  if(!selCategory) return;
   selCategory.innerHTML = '<option value="">Select a category</option>';
   uniqueCategories().forEach(cat=>{
     const opt = document.createElement("option");
@@ -240,13 +279,13 @@ function populateCategoryDropdown(){
 /* ===========================
    SEARCH
 =========================== */
-searchInput.addEventListener("input", ()=>{
+searchInput && searchInput.addEventListener("input", ()=>{
   currentSearch = (searchInput.value || "").toLowerCase();
   renderProducts();
 });
 
 /* ===========================
-   RENDER PRODUCTS
+   FILTER + SKELETONS
 =========================== */
 function filteredList(){
   let list = products;
@@ -258,8 +297,8 @@ function filteredList(){
   }
   if(currentSearch){
     list = list.filter(p =>
-      p.name.toLowerCase().includes(currentSearch) ||
-      p.category.toLowerCase().includes(currentSearch) ||
+      (p.name||"").toLowerCase().includes(currentSearch) ||
+      (p.category||"").toLowerCase().includes(currentSearch) ||
       (p.details||"").toLowerCase().includes(currentSearch)
     );
   }
@@ -280,8 +319,13 @@ function clearSkeletons(){
   if(skeletonGrid) skeletonGrid.innerHTML = "";
 }
 
+/* ===========================
+   RENDER PRODUCTS
+=========================== */
 function renderProducts(){
   const list = filteredList();
+  if(!productList) return;
+
   productList.innerHTML = "";
   if(emptyState) emptyState.style.display = list.length ? "none" : "block";
 
@@ -291,15 +335,14 @@ function renderProducts(){
     card.setAttribute("data-id", product.id);
 
     card.innerHTML = `
-      <div class="card-actions" style="${isAdmin?'':'display:none'}">
+      <div class="card-actions" style="${isAdmin?'z-index:5;':''} ${isAdmin?'':'display:none'}">
         <button class="edit-btn" title="Edit"><i class="fa-solid fa-pen"></i></button>
         <button class="delete-btn danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
       </div>
 
-      <button class="wish-btn" title="Add to wishlist"><i class="fa-regular fa-heart"></i></button>
-
       <div class="product-image">
         <img src="${product.image}" alt="${product.name}">
+        <button class="wish-btn" title="Add to wishlist"><i class="fa-regular fa-heart"></i></button>
       </div>
 
       <h3 class="title">${product.name}</h3>
@@ -314,7 +357,7 @@ function renderProducts(){
       <button class="buy-now">Buy on WhatsApp</button>
     `;
 
-    // Wishlist state
+    // Wishlist state + toggle
     const wishBtn = card.querySelector(".wish-btn");
     if(wishlist.includes(product.id)) wishBtn.classList.add("active");
     wishBtn.addEventListener("click", ()=>{
@@ -378,7 +421,13 @@ function renderProducts(){
             showToast("Product deleted");
           }catch(e){
             console.error(e);
-            showToast("Delete failed");
+            showToast("Delete failed (server). Removing locally.");
+            // Local remove if server not reachable
+            products = products.filter(p => p.id !== product.id);
+            saveProductsLocal();
+            populateCategoryChips(currentFilterCat);
+            renderProducts();
+            populateCategoryDropdown();
           }
         }
       });
@@ -395,37 +444,40 @@ let modalProduct = null;
 
 function showDetails(product){
   modalProduct = product;
-  modalImg.src = product.image;
-  modalTitle.textContent = product.name;
-  modalDetails.textContent = product.details;
-  modalPrice.textContent = formatRs(product.price);
-  modalQtySpan.textContent = "1";
-  modal.style.display = "flex";
-  modal.setAttribute("aria-hidden", "false");
+  if(modalImg) modalImg.src = product.image;
+  if(modalTitle) modalTitle.textContent = product.name;
+  if(modalDetails) modalDetails.textContent = product.details;
+  if(modalPrice) modalPrice.textContent = formatRs(product.price);
+  if(modalQtySpan) modalQtySpan.textContent = "1";
+  if(modal){
+    modal.style.display = "flex";
+    modal.setAttribute("aria-hidden", "false");
+  }
 }
 function closeModal(){
+  if(!modal) return;
   modal.style.display = "none";
   modal.setAttribute("aria-hidden", "true");
   modalProduct = null;
 }
-modalClose.addEventListener("click", closeModal);
+modalClose && modalClose.addEventListener("click", closeModal);
 window.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
 window.addEventListener("keydown", (e)=>{ if(e.key === "Escape") closeModal(); });
 
 // modal qty + buy + add-to-cart
-modalQtyMinus.addEventListener("click", ()=>{
+modalQtyMinus && modalQtyMinus.addEventListener("click", ()=>{
   modalQtySpan.textContent = Math.max(1, parseInt(modalQtySpan.textContent) - 1);
 });
-modalQtyPlus.addEventListener("click", ()=>{
+modalQtyPlus && modalQtyPlus.addEventListener("click", ()=>{
   modalQtySpan.textContent = parseInt(modalQtySpan.textContent) + 1;
 });
-modalBuy.addEventListener("click", ()=>{
+modalBuy && modalBuy.addEventListener("click", ()=>{
   if(!modalProduct) return;
   const qty = parseInt(modalQtySpan.textContent);
   const message = `Hello, I want to buy ${qty} x ${modalProduct.name} for Rs ${modalProduct.price * qty}`;
   window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`, "_blank");
 });
-modalAddCart.addEventListener("click", ()=>{
+modalAddCart && modalAddCart.addEventListener("click", ()=>{
   if(!modalProduct) return;
   const qty = parseInt(modalQtySpan.textContent);
   addToCart(modalProduct, qty);
@@ -437,22 +489,24 @@ modalAddCart.addEventListener("click", ()=>{
 /* ===========================
    ADMIN SIDEBAR
 =========================== */
-adminGear.addEventListener("click", ()=>{
+adminGear && adminGear.addEventListener("click", ()=>{
+  if(!adminSidebar) return;
   adminSidebar.classList.add("open");
   adminSidebar.setAttribute("aria-hidden","false");
   refreshAdminUI();
 });
-adminClose.addEventListener("click", ()=>{
-  adminSidebar.classList.remove("open");
-  adminSidebar.setAttribute("aria-hidden","true");
+adminClose && adminClose.addEventListener("click", ()=>{
+  adminSidebar && adminSidebar.classList.remove("open");
+  adminSidebar && adminSidebar.setAttribute("aria-hidden","true");
 });
 document.addEventListener("keydown", (e)=>{
   if(e.key === "Escape") {
-    adminSidebar.classList.remove("open");
-    adminSidebar.setAttribute("aria-hidden","true");
+    adminSidebar && adminSidebar.classList.remove("open");
+    adminSidebar && adminSidebar.setAttribute("aria-hidden","true");
   }
 });
 function refreshAdminUI(){
+  if(!adminLoginWrap || !productForm || !adminActionSection) return;
   if(isAdmin){
     adminLoginWrap.style.display = "none";
     productForm.style.display = "flex";
@@ -465,7 +519,7 @@ function refreshAdminUI(){
     document.querySelectorAll(".card-actions").forEach(el => el.style.display = "none");
   }
 }
-adminLoginBtn.addEventListener("click", ()=>{
+adminLoginBtn && adminLoginBtn.addEventListener("click", ()=>{
   const val = (adminPass.value || "").trim();
   if(val === ADMIN_PASSWORD){
     isAdmin = true;
@@ -489,18 +543,18 @@ adminExitBtn && adminExitBtn.addEventListener("click", ()=>{
 =========================== */
 let editingId = null;
 
-productForm.addEventListener("submit", async (e)=>{
+productForm && productForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
   if(!isAdmin){ alert("Login as admin first."); return; }
 
-  const idVal = inpId.value ? inpId.value : null; // keep string ids from backend
-  const name = inpName.value.trim();
-  const categorySelect = selCategory.value;
-  const newCategory = inpNewCategory.value.trim();
+  const idVal = inpId && inpId.value ? normalizeId(inpId.value) : null;
+  const name = (inpName.value || "").trim();
+  const categorySelect = (selCategory && selCategory.value) || "";
+  const newCategory = (inpNewCategory.value || "").trim();
   const price = parseFloat(inpPrice.value);
-  const details = inpDetails.value.trim();
-  const url = inpImageURL.value.trim();
-  const file = inpImageFile.files[0];
+  const details = (inpDetails.value || "").trim();
+  const url = (inpImageURL.value || "").trim();
+  const file = inpImageFile && inpImageFile.files ? inpImageFile.files[0] : null;
 
   if(!name || (!categorySelect && !newCategory) || isNaN(price) || !details || (!url && !file)){
     alert("Fill all required fields and provide an image (filename/URL or upload).");
@@ -508,6 +562,7 @@ productForm.addEventListener("submit", async (e)=>{
   }
   const category = newCategory || categorySelect;
 
+  // Allow simple filenames or full URLs; if file provided, store as base64
   let imageData = url;
   if(file){
     imageData = await fileToBase64(file);
@@ -529,9 +584,9 @@ productForm.addEventListener("submit", async (e)=>{
     }
     saveProductsLocal();
     productForm.reset();
-    inpId.value = "";
-    selCategory.value = "";
-    inpNewCategory.value = "";
+    if(inpId) inpId.value = "";
+    if(selCategory) selCategory.value = "";
+    if(inpNewCategory) inpNewCategory.value = "";
 
     populateCategoryDropdown();
     populateCategoryChips(currentFilterCat);
@@ -542,30 +597,30 @@ productForm.addEventListener("submit", async (e)=>{
   }
 });
 
-formReset.addEventListener("click", ()=>{
+formReset && formReset.addEventListener("click", ()=>{
   editingId = null;
-  productForm.reset();
-  inpId.value = "";
-  selCategory.value = "";
+  productForm && productForm.reset();
+  if(inpId) inpId.value = "";
+  if(selCategory) selCategory.value = "";
 });
 
 function startEdit(product){
   editingId = product.id;
-  inpId.value = product.id;
-  inpName.value = product.name;
-  inpPrice.value = product.price;
-  inpDetails.value = product.details;
+  if(inpId) inpId.value = product.id;
+  if(inpName) inpName.value = product.name;
+  if(inpPrice) inpPrice.value = product.price;
+  if(inpDetails) inpDetails.value = product.details;
 
   if(uniqueCategories().includes(product.category)){
-    selCategory.value = product.category;
-    inpNewCategory.value = "";
+    if(selCategory) selCategory.value = product.category;
+    if(inpNewCategory) inpNewCategory.value = "";
   }else{
-    selCategory.value = "";
-    inpNewCategory.value = product.category;
+    if(selCategory) selCategory.value = "";
+    if(inpNewCategory) inpNewCategory.value = product.category;
   }
-  inpImageURL.value = product.image && !product.image.startsWith("data:") ? product.image : "";
+  if(inpImageURL) inpImageURL.value = product.image && !String(product.image).startsWith("data:") ? product.image : "";
 
-  adminSidebar.classList.add("open");
+  adminSidebar && adminSidebar.classList.add("open");
   refreshAdminUI();
 }
 
@@ -579,24 +634,26 @@ function fileToBase64(file){
 }
 
 /* ===========================
-   CART (✅ DISTINCT ITEMS FIX)
+   CART
 =========================== */
 function addToCart(product, qty=1){
-  // ensure unique per product.id
-  const existing = cart.find(i => i.id === product.id);
+  const pid = normalizeId(product.id);
+  const existing = cart.find(i => normalizeId(i.id) === pid);
   if(existing){
     existing.qty += qty;
   }else{
-    cart.push({ id: product.id, name: product.name, price: product.price, image: product.image, qty });
+    cart.push({ id: pid, name: product.name, price: product.price, image: product.image, qty });
   }
   saveCart();
 }
 function removeFromCart(id){
-  cart = cart.filter(i => i.id !== id);
+  const pid = normalizeId(id);
+  cart = cart.filter(i => normalizeId(i.id) !== pid);
   saveCart();
 }
 function updateCartQty(id, delta){
-  const item = cart.find(i => i.id === id);
+  const pid = normalizeId(id);
+  const item = cart.find(i => normalizeId(i.id) === pid);
   if(!item) return;
   item.qty = Math.max(1, item.qty + delta);
   saveCart();
@@ -605,6 +662,8 @@ function cartTotal(){
   return cart.reduce((sum,i)=> sum + (i.price * i.qty), 0);
 }
 function renderCart(){
+  if(!cartItems || !cartSubtotal) return;
+
   cartItems.innerHTML = "";
   if(cart.length === 0){
     cartItems.innerHTML = `<div class="empty">Your cart is empty.</div>`;
@@ -639,8 +698,8 @@ function renderCart(){
   }
   cartSubtotal.textContent = formatRs(cartTotal());
 }
-function openCart(){ cartDrawer.classList.add("open"); }
-function closeCart(){ cartDrawer.classList.remove("open"); }
+function openCart(){ cartDrawer && cartDrawer.classList.add("open"); }
+function closeCart(){ cartDrawer && cartDrawer.classList.remove("open"); }
 
 cartBtn && cartBtn.addEventListener("click", ()=>{ renderCart(); openCart(); });
 cartClose && cartClose.addEventListener("click", closeCart);
@@ -703,11 +762,7 @@ async function init(){
   try{
     setSkeletons();
     products = await apiGetProducts();
-
-    // 🔒 Ensure each product has a stable unique id (string allowed)
-    products = products.map(p => ({ ...p, id: (p.id ?? cryptoRandomId()) }));
-
-    saveProductsLocal();
+    saveProductsLocal(); // cache for fallback
   }catch(e){
     console.error(e);
   }finally{
@@ -719,18 +774,16 @@ async function init(){
   refreshAdminUI();
   updateBadges();
 
-  // Home/About Fade-in on scroll
+  // Fade-in on scroll
   document.addEventListener("scroll", () => {
     document.querySelectorAll(".fade-in").forEach(section => {
       const sectionTop = section.getBoundingClientRect().top;
       const windowHeight = window.innerHeight;
-      if (sectionTop < windowHeight - 100) section.classList.add("show");
+      if (sectionTop < windowHeight - 100) {
+        section.classList.add("show");
+      }
     });
   });
   document.dispatchEvent(new Event("scroll"));
 }
 init();
-
-function cryptoRandomId(){
-  return 'p-' + Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
-}
