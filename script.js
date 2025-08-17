@@ -1,58 +1,28 @@
 /* ===========================
-   BACKEND + PERSISTENCE
+   CONFIG / STATE
 =========================== */
-// ✅ Correct base to avoid /api/api
-const API_BASE = "https://herbalbackend-production.up.railway.app";
-const API_PRODUCTS = `${API_BASE}/api/products`;
+const API_URL = "https://herbalbackend-production.up.railway.app"; // backend base
+const WA_NUMBER = "923115121207";
 
-// LocalStorage keys (keep your existing behavior)
 const LS_KEY = "products_v2";
 const ADMIN_KEY = "isAdmin";
 const THEME_KEY = "theme";
 const ADMIN_PASSWORD = "123";
 
-// Fallback seed (same as yours)
-let products = JSON.parse(localStorage.getItem(LS_KEY)) || [
-  {
-    id: 1,
-    name: "Marsea Herbal Oil (150 ml)",
-    category: "Hair Oil",
-    price: 800,
-    image: "marsea-oil.jpg",
-    details: "100% pure herbal hair oil, crafted with coconut oil, castor oil, and olive oil, enriched with amla, bhringraj, fenugreek, hibiscus, neem, black seeds, aloe vera, and rosemary. Strengthens roots, promotes hair growth, soothes the scalp, and is suitable for all hair types."
-  },
-  {
-    id: 2,
-    name: "Apricot Kernel Oil (100ml)",
-    category: "Hair Oil",
-    price: 700,
-    image: "apricot.jpg",
-    details: "Lightweight oil rich in vitamins A, C, and E; nourishes the scalp, improves shine, and strengthens hair follicles. Ideal for daily use, sensitive scalps, and those seeking a non-greasy, hydrating treatment that promotes softness and reduces frizz."
-  },
-  {
-    id: 3,
-    name: "Natural Teeth Whitening Powder",
-    category: "Teeth Whitener",
-    price: 500,
-    image: "teeth.jpg",
-    details: "Herbal formula for naturally whiter teeth without harsh chemicals, crafted with activated charcoal and gentle natural abrasives. Safe for daily use, removes stains, promotes gum health, and leaves a fresh, clean feel with a subtle mint flavor."
-  },
-  {
-    id: 4,
-    name: "Aloe Vera Skin Toner",
-    category: "Skin Toners",
-    price: 750,
-    image: "face-toner.jpg",
-    details: "Hydrates skin and soothes irritation with a gentle, all-natural formula crafted from aloe vera, cucumber, honey, and rose water. Aloe vera calms redness, cucumber refreshes and tightens pores, honey locks in moisture, and rose water balances skin tone. Suitable for all skin types."
-  },
-];
+const LS_WISHLIST = "wishlist_v1";
+const LS_CART = "cart_v1";
 
+let products = [];
 let isAdmin = localStorage.getItem(ADMIN_KEY) === "true";
 let currentFilterCat = "All";
 let currentSearch = "";
 
+let wishlist = JSON.parse(localStorage.getItem(LS_WISHLIST) || "[]");
+let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");
+let showWishlistOnly = false;
+
 /* ===========================
-   ELEMENTS (same as yours)
+   ELEMENTS
 =========================== */
 const navToggle = document.getElementById("menu-toggle");
 const navLinks = document.getElementById("nav-links");
@@ -61,6 +31,8 @@ const searchInput = document.getElementById("search");
 
 const productList = document.getElementById("product-list");
 const categoryButtons = document.getElementById("category-buttons");
+const skeletonGrid = document.getElementById("skeleton-grid");
+const emptyState = document.getElementById("empty-state");
 
 const modal = document.getElementById("product-modal");
 const modalClose = document.getElementById("modal-close");
@@ -69,6 +41,7 @@ const modalTitle = document.getElementById("modal-title");
 const modalDetails = document.getElementById("modal-details");
 const modalPrice = document.getElementById("modal-price");
 const modalBuy = document.getElementById("modal-buy");
+const modalAddCart = document.getElementById("modal-add-cart");
 const modalQtyWrap = document.getElementById("modal-qty");
 const modalQtyMinus = modalQtyWrap.querySelector(".qty-minus");
 const modalQtyPlus = modalQtyWrap.querySelector(".qty-plus");
@@ -94,8 +67,26 @@ const inpImageFile = document.getElementById("prod-image-file");
 const inpDetails = document.getElementById("prod-details");
 const formReset = document.getElementById("form-reset");
 
+const toastContainer = document.getElementById("toast-container");
+
+const cartBtn = document.getElementById("cartBtn");
+const wishlistBtn = document.getElementById("wishlistBtn");
+const cartDrawer = document.getElementById("cart-drawer");
+const cartClose = document.getElementById("cartClose");
+const cartItems = document.getElementById("cartItems");
+const cartSubtotal = document.getElementById("cartSubtotal");
+const cartCheckout = document.getElementById("cartCheckout");
+const cartClear = document.getElementById("cartClear");
+const cartCount = document.getElementById("cartCount");
+const wishlistCount = document.getElementById("wishlistCount");
+
+/* Testimonials */
+const testiTrack = document.getElementById("testiTrack");
+const testiPrev = document.getElementById("testiPrev");
+const testiNext = document.getElementById("testiNext");
+
 /* ===========================
-   THEME (unchanged)
+   THEME
 =========================== */
 (function initTheme(){
   const saved = localStorage.getItem(THEME_KEY);
@@ -125,83 +116,84 @@ document.querySelectorAll('.nav-links a').forEach(link => {
 /* ===========================
    HELPERS
 =========================== */
-function saveProductsLocal(){ localStorage.setItem(LS_KEY, JSON.stringify(products)); }
-function uniqueCategories(){ return [...new Set(products.map(p => p.category))].sort(); }
-function normalize(p){
-  // Ensure backend/LS shapes align
-  return {
-    id: p.id,
-    name: p.name,
-    category: p.category,
-    price: Number(p.price),
-    image: p.image,
-    details: p.details
-  };
+function showToast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  toastContainer.appendChild(t);
+  setTimeout(()=>{ t.remove(); }, 2600);
+}
+function saveWishlist(){ localStorage.setItem(LS_WISHLIST, JSON.stringify(wishlist)); }
+function saveCart(){ localStorage.setItem(LS_CART, JSON.stringify(cart)); }
+function formatRs(x){ return "Rs " + Number(x||0).toLocaleString(); }
+
+/* ===========================
+   BACKEND SYNC
+=========================== */
+async function apiGetProducts(){
+  try{
+    const res = await fetch(`${API_URL}/products`, { cache: "no-store" });
+    if(!res.ok) throw new Error("Failed");
+    return await res.json();
+  }catch(err){
+    console.error(err);
+    showToast("Failed to load products, showing local items.");
+    return JSON.parse(localStorage.getItem(LS_KEY)) || [
+      {
+        id: "p1",
+        name: "Marsea Herbal Oil (150 ml)",
+        category: "Hair Oil",
+        price: 800,
+        image: "marsea-oil.jpg",
+        details: "100% pure herbal hair oil, crafted with coconut oil, castor oil, and olive oil, enriched with amla, bhringraj, fenugreek, hibiscus, neem, black seeds, aloe vera, and rosemary. Strengthens roots, promotes hair growth, soothes the scalp, and is suitable for all hair types."
+      },
+      {
+        id: "p2",
+        name: "Apricot Kernel Oil (100ml)",
+        category: "Hair Oil",
+        price: 700,
+        image: "apricot.jpg",
+        details: "Lightweight oil rich in vitamins A, C, and E; nourishes the scalp, improves shine, and strengthens hair follicles."
+      },
+      {
+        id: "p3",
+        name: "Natural Teeth Whitening Powder",
+        category: "Teeth Whitener",
+        price: 500,
+        image: "teeth.jpg",
+        details: "Herbal formula for naturally whiter teeth without harsh chemicals."
+      }
+    ];
+  }
+}
+async function apiCreateProduct(p){
+  const res = await fetch(`${API_URL}/products`,{
+    method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(p)
+  });
+  if(!res.ok) throw new Error("Create failed");
+  return res.json();
+}
+async function apiUpdateProduct(id,p){
+  const res = await fetch(`${API_URL}/products/${id}`,{
+    method:"PUT", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(p)
+  });
+  if(!res.ok) throw new Error("Update failed");
+  return res.json();
+}
+async function apiDeleteProduct(id){
+  const res = await fetch(`${API_URL}/products/${id}`,{ method:"DELETE" });
+  if(!res.ok) throw new Error("Delete failed");
+  return res.json();
 }
 
 /* ===========================
-   API WRAPPER (with graceful fallback)
+   LOCAL PERSIST (fallback)
 =========================== */
-async function apiGetAll(){
-  try{
-    const res = await fetch(API_PRODUCTS, {headers:{Accept:"application/json"}});
-    if(!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    if(Array.isArray(data)){
-      products = data.map(normalize);
-      saveProductsLocal(); // cache
-    }
-  }catch(err){
-    console.warn("GET failed, using localStorage cache:", err);
-    products = JSON.parse(localStorage.getItem(LS_KEY)) || products;
-  }
+function saveProductsLocal(){
+  localStorage.setItem(LS_KEY, JSON.stringify(products));
 }
-
-async function apiCreate(body){
-  try{
-    const res = await fetch(API_PRODUCTS, {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(body)
-    });
-    if(!res.ok) throw new Error(await res.text());
-    return await res.json();
-  }catch(err){
-    console.warn("POST failed, saving locally:", err);
-    // Local fallback
-    const newId = products.length ? Math.max(...products.map(p=>p.id||0))+1 : 1;
-    const local = {...body, id:newId};
-    products.push(local);
-    saveProductsLocal();
-    return local;
-  }
-}
-
-async function apiUpdate(id, body){
-  try{
-    const res = await fetch(`${API_PRODUCTS}/${id}`, {
-      method:"PUT", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(body)
-    });
-    if(!res.ok) throw new Error(await res.text());
-    return await res.json();
-  }catch(err){
-    console.warn("PUT failed, updating locally:", err);
-    const idx = products.findIndex(p=>p.id===id);
-    if(idx>-1){ products[idx] = {...body, id}; saveProductsLocal(); }
-    return products.find(p=>p.id===id);
-  }
-}
-
-async function apiDelete(id){
-  try{
-    const res = await fetch(`${API_PRODUCTS}/${id}`, { method:"DELETE" });
-    if(!res.ok) throw new Error(await res.text());
-  }catch(err){
-    console.warn("DELETE failed, removing locally:", err);
-  }finally{
-    products = products.filter(p=>p.id!==id);
-    saveProductsLocal();
-  }
+function uniqueCategories(){
+  return [...new Set(products.map(p => p.category))].sort();
 }
 
 /* ===========================
@@ -210,17 +202,31 @@ async function apiDelete(id){
 function populateCategoryChips(active = "All"){
   currentFilterCat = active;
   categoryButtons.innerHTML = "";
-  const cats = ["All", ...uniqueCategories()];
+  const base = ["All", ...uniqueCategories()];
+  const cats = showWishlistOnly ? ["Wishlist"] : base;
+
   cats.forEach(cat=>{
     const btn = document.createElement("button");
     btn.textContent = cat;
     btn.className = cat === active ? "active" : "";
     btn.addEventListener("click", ()=> {
-      populateCategoryChips(cat);
+      if(cat === "Wishlist"){
+        showWishlistOnly = true;
+        currentFilterCat = "All";
+      }else{
+        showWishlistOnly = false;
+        populateCategoryChips(cat);
+      }
       renderProducts();
     });
     categoryButtons.appendChild(btn);
   });
+
+  if(!showWishlistOnly){
+    [...categoryButtons.children].forEach(b=>{
+      if(b.textContent === active) b.classList.add("active");
+    });
+  }
 }
 function populateCategoryDropdown(){
   selCategory.innerHTML = '<option value="">Select a category</option>';
@@ -240,11 +246,14 @@ searchInput.addEventListener("input", ()=>{
 });
 
 /* ===========================
-   FILTER + RENDER
+   RENDER PRODUCTS
 =========================== */
 function filteredList(){
   let list = products;
-  if(currentFilterCat !== "All"){
+
+  if(showWishlistOnly){
+    list = list.filter(p => wishlist.includes(p.id));
+  }else if(currentFilterCat !== "All"){
     list = list.filter(p => p.category === currentFilterCat);
   }
   if(currentSearch){
@@ -257,9 +266,24 @@ function filteredList(){
   return list;
 }
 
+function setSkeletons(n=6){
+  if(!skeletonGrid) return;
+  skeletonGrid.innerHTML = "";
+  for(let i=0;i<n;i++){
+    const s = document.createElement("div");
+    s.className = "skel-card";
+    s.innerHTML = `<div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div>`;
+    skeletonGrid.appendChild(s);
+  }
+}
+function clearSkeletons(){
+  if(skeletonGrid) skeletonGrid.innerHTML = "";
+}
+
 function renderProducts(){
-  productList.innerHTML = "";
   const list = filteredList();
+  productList.innerHTML = "";
+  if(emptyState) emptyState.style.display = list.length ? "none" : "block";
 
   list.forEach((product)=>{
     const card = document.createElement("div");
@@ -272,12 +296,14 @@ function renderProducts(){
         <button class="delete-btn danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
       </div>
 
+      <button class="wish-btn" title="Add to wishlist"><i class="fa-regular fa-heart"></i></button>
+
       <div class="product-image">
         <img src="${product.image}" alt="${product.name}">
       </div>
 
       <h3 class="title">${product.name}</h3>
-      <div class="price">Rs ${Number(product.price).toLocaleString()}</div>
+      <div class="price">${formatRs(product.price)}</div>
 
       <div class="quantity-control">
         <button class="qty-minus" aria-label="Decrease">-</button>
@@ -288,18 +314,36 @@ function renderProducts(){
       <button class="buy-now">Buy on WhatsApp</button>
     `;
 
-    // fallback image
+    // Wishlist state
+    const wishBtn = card.querySelector(".wish-btn");
+    if(wishlist.includes(product.id)) wishBtn.classList.add("active");
+    wishBtn.addEventListener("click", ()=>{
+      if(wishlist.includes(product.id)){
+        wishlist = wishlist.filter(id => id !== product.id);
+        wishBtn.classList.remove("active");
+        showToast("Removed from wishlist");
+      }else{
+        wishlist.push(product.id);
+        wishBtn.classList.add("active");
+        showToast("Added to wishlist");
+      }
+      saveWishlist();
+      updateBadges();
+      if(showWishlistOnly) renderProducts();
+    });
+
+    // Image fallback
     const img = card.querySelector("img");
     img.addEventListener("error", ()=>{
       img.src = "placeholder.png";
       img.alt = product.name + " (image missing)";
     });
 
-    // open modal
+    // Open modal on image/title click
     card.querySelector(".product-image").addEventListener("click", ()=> showDetails(product));
     card.querySelector(".title").addEventListener("click", ()=> showDetails(product));
 
-    // qty
+    // Quantity controls
     const qtySpan = card.querySelector(".quantity-control span");
     card.querySelector(".qty-minus").addEventListener("click", ()=>{
       qtySpan.textContent = Math.max(1, parseInt(qtySpan.textContent) - 1);
@@ -308,14 +352,14 @@ function renderProducts(){
       qtySpan.textContent = parseInt(qtySpan.textContent) + 1;
     });
 
-    // WhatsApp
+    // Buy on WhatsApp from card
     card.querySelector(".buy-now").addEventListener("click", ()=>{
       const qty = parseInt(qtySpan.textContent);
       const message = `Hello, I want to buy ${qty} x ${product.name} for Rs ${product.price * qty}`;
-      window.open(`https://wa.me/923115121207?text=${encodeURIComponent(message)}`, "_blank");
+      window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`, "_blank");
     });
 
-    // admin buttons
+    // Admin actions
     const editBtn = card.querySelector(".edit-btn");
     const delBtn = card.querySelector(".delete-btn");
     if(editBtn){
@@ -324,10 +368,18 @@ function renderProducts(){
     if(delBtn){
       delBtn.addEventListener("click", async ()=>{
         if(confirm(`Delete "${product.name}"?`)){
-          await apiDelete(product.id);   // backend + local fallback
-          populateCategoryChips(currentFilterCat);
-          renderProducts();
-          populateCategoryDropdown();
+          try{
+            await apiDeleteProduct(product.id);
+            products = products.filter(p => p.id !== product.id);
+            saveProductsLocal();
+            populateCategoryChips(currentFilterCat);
+            renderProducts();
+            populateCategoryDropdown();
+            showToast("Product deleted");
+          }catch(e){
+            console.error(e);
+            showToast("Delete failed");
+          }
         }
       });
     }
@@ -340,24 +392,27 @@ function renderProducts(){
    MODAL
 =========================== */
 let modalProduct = null;
+
 function showDetails(product){
   modalProduct = product;
   modalImg.src = product.image;
   modalTitle.textContent = product.name;
   modalDetails.textContent = product.details;
-  modalPrice.textContent = `Rs ${Number(product.price).toLocaleString()}`;
+  modalPrice.textContent = formatRs(product.price);
   modalQtySpan.textContent = "1";
   modal.style.display = "flex";
   modal.setAttribute("aria-hidden", "false");
 }
-modalClose.addEventListener("click", closeModal);
-window.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
-window.addEventListener("keydown", (e)=>{ if(e.key === "Escape") closeModal(); });
 function closeModal(){
   modal.style.display = "none";
   modal.setAttribute("aria-hidden", "true");
   modalProduct = null;
 }
+modalClose.addEventListener("click", closeModal);
+window.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
+window.addEventListener("keydown", (e)=>{ if(e.key === "Escape") closeModal(); });
+
+// modal qty + buy + add-to-cart
 modalQtyMinus.addEventListener("click", ()=>{
   modalQtySpan.textContent = Math.max(1, parseInt(modalQtySpan.textContent) - 1);
 });
@@ -368,11 +423,19 @@ modalBuy.addEventListener("click", ()=>{
   if(!modalProduct) return;
   const qty = parseInt(modalQtySpan.textContent);
   const message = `Hello, I want to buy ${qty} x ${modalProduct.name} for Rs ${modalProduct.price * qty}`;
-  window.open(`https://wa.me/923115121207?text=${encodeURIComponent(message)}`, "_blank");
+  window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`, "_blank");
+});
+modalAddCart.addEventListener("click", ()=>{
+  if(!modalProduct) return;
+  const qty = parseInt(modalQtySpan.textContent);
+  addToCart(modalProduct, qty);
+  showToast("Added to cart");
+  updateBadges();
+  renderCart();
 });
 
 /* ===========================
-   ADMIN SIDEBAR OPEN/CLOSE
+   ADMIN SIDEBAR
 =========================== */
 adminGear.addEventListener("click", ()=>{
   adminSidebar.classList.add("open");
@@ -389,10 +452,6 @@ document.addEventListener("keydown", (e)=>{
     adminSidebar.setAttribute("aria-hidden","true");
   }
 });
-
-/* ===========================
-   ADMIN LOGIN / EXIT
-=========================== */
 function refreshAdminUI(){
   if(isAdmin){
     adminLoginWrap.style.display = "none";
@@ -413,7 +472,7 @@ adminLoginBtn.addEventListener("click", ()=>{
     localStorage.setItem(ADMIN_KEY, "true");
     adminPass.value = "";
     refreshAdminUI();
-    alert("Admin mode enabled");
+    showToast("Admin mode ON");
   }else{
     alert("Incorrect password!");
   }
@@ -422,10 +481,11 @@ adminExitBtn && adminExitBtn.addEventListener("click", ()=>{
   isAdmin = false;
   localStorage.setItem(ADMIN_KEY, "false");
   refreshAdminUI();
+  showToast("Admin mode OFF");
 });
 
 /* ===========================
-   ADD / EDIT PRODUCT
+   ADD / EDIT PRODUCT (CRUD)
 =========================== */
 let editingId = null;
 
@@ -433,7 +493,7 @@ productForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
   if(!isAdmin){ alert("Login as admin first."); return; }
 
-  const idVal = inpId.value ? parseInt(inpId.value) : null;
+  const idVal = inpId.value ? inpId.value : null; // keep string ids from backend
   const name = inpName.value.trim();
   const categorySelect = selCategory.value;
   const newCategory = inpNewCategory.value.trim();
@@ -448,34 +508,38 @@ productForm.addEventListener("submit", async (e)=>{
   }
   const category = newCategory || categorySelect;
 
-  // Prefer file -> base64, else use URL/filename
   let imageData = url;
   if(file){
     imageData = await fileToBase64(file);
   }
 
-  const body = { name, category, price, image: imageData, details };
+  const payload = { name, category, price, image: imageData, details };
 
-  if(idVal || editingId){
-    const idToUse = idVal || editingId;
-    await apiUpdate(idToUse, body);
-    editingId = null;
-  }else{
-    await apiCreate(body);
+  try{
+    if(idVal || editingId){
+      const idToUse = idVal || editingId;
+      const updated = await apiUpdateProduct(idToUse, payload);
+      const idx = products.findIndex(p=> p.id === idToUse);
+      if(idx !== -1) products[idx] = updated;
+      showToast("Product updated");
+    }else{
+      const created = await apiCreateProduct(payload);
+      products.push(created);
+      showToast("Product added");
+    }
+    saveProductsLocal();
+    productForm.reset();
+    inpId.value = "";
+    selCategory.value = "";
+    inpNewCategory.value = "";
+
+    populateCategoryDropdown();
+    populateCategoryChips(currentFilterCat);
+    renderProducts();
+  }catch(err){
+    console.error(err);
+    alert("Save failed. Please try again.");
   }
-
-  saveProductsLocal();
-  productForm.reset();
-  inpId.value = "";
-  selCategory.value = "";
-  inpNewCategory.value = "";
-
-  await apiGetAll(); // refresh from backend if available
-  populateCategoryDropdown();
-  populateCategoryChips(currentFilterCat);
-  renderProducts();
-
-  alert("Saved!");
 });
 
 formReset.addEventListener("click", ()=>{
@@ -499,13 +563,12 @@ function startEdit(product){
     selCategory.value = "";
     inpNewCategory.value = product.category;
   }
-  inpImageURL.value = product.image && !String(product.image).startsWith("data:") ? product.image : "";
+  inpImageURL.value = product.image && !product.image.startsWith("data:") ? product.image : "";
 
   adminSidebar.classList.add("open");
   refreshAdminUI();
 }
 
-/* Base64 helper */
 function fileToBase64(file){
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
@@ -516,23 +579,158 @@ function fileToBase64(file){
 }
 
 /* ===========================
+   CART (✅ DISTINCT ITEMS FIX)
+=========================== */
+function addToCart(product, qty=1){
+  // ensure unique per product.id
+  const existing = cart.find(i => i.id === product.id);
+  if(existing){
+    existing.qty += qty;
+  }else{
+    cart.push({ id: product.id, name: product.name, price: product.price, image: product.image, qty });
+  }
+  saveCart();
+}
+function removeFromCart(id){
+  cart = cart.filter(i => i.id !== id);
+  saveCart();
+}
+function updateCartQty(id, delta){
+  const item = cart.find(i => i.id === id);
+  if(!item) return;
+  item.qty = Math.max(1, item.qty + delta);
+  saveCart();
+}
+function cartTotal(){
+  return cart.reduce((sum,i)=> sum + (i.price * i.qty), 0);
+}
+function renderCart(){
+  cartItems.innerHTML = "";
+  if(cart.length === 0){
+    cartItems.innerHTML = `<div class="empty">Your cart is empty.</div>`;
+  }else{
+    cart.forEach(item=>{
+      const row = document.createElement("div");
+      row.className = "cart-row";
+      row.innerHTML = `
+        <img src="${item.image}" alt="${item.name}" onerror="this.src='placeholder.png'">
+        <div class="cart-info">
+          <div class="cart-title">${item.name}</div>
+          <div class="cart-price">${formatRs(item.price)}</div>
+          <div class="quantity-control sm">
+            <button class="c-minus">-</button>
+            <span>${item.qty}</span>
+            <button class="c-plus">+</button>
+          </div>
+        </div>
+        <button class="c-remove" title="Remove">&times;</button>
+      `;
+      row.querySelector(".c-minus").addEventListener("click", ()=>{
+        updateCartQty(item.id, -1); renderCart(); updateBadges();
+      });
+      row.querySelector(".c-plus").addEventListener("click", ()=>{
+        updateCartQty(item.id, +1); renderCart(); updateBadges();
+      });
+      row.querySelector(".c-remove").addEventListener("click", ()=>{
+        removeFromCart(item.id); renderCart(); updateBadges();
+      });
+      cartItems.appendChild(row);
+    });
+  }
+  cartSubtotal.textContent = formatRs(cartTotal());
+}
+function openCart(){ cartDrawer.classList.add("open"); }
+function closeCart(){ cartDrawer.classList.remove("open"); }
+
+cartBtn && cartBtn.addEventListener("click", ()=>{ renderCart(); openCart(); });
+cartClose && cartClose.addEventListener("click", closeCart);
+cartClear && cartClear.addEventListener("click", ()=>{
+  if(cart.length && confirm("Clear cart?")){
+    cart = [];
+    saveCart();
+    renderCart();
+    updateBadges();
+  }
+});
+cartCheckout && cartCheckout.addEventListener("click", ()=>{
+  if(!cart.length) return;
+  const lines = cart.map(i => `• ${i.qty} x ${i.name} — Rs ${i.price * i.qty}`);
+  const total = cartTotal();
+  const msg = `Hello! I want to order:\n${lines.join("\n")}\n\nTotal: Rs ${total}`;
+  window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
+});
+
+/* ===========================
+   WISHLIST
+=========================== */
+wishlistBtn && wishlistBtn.addEventListener("click", ()=>{
+  showWishlistOnly = !showWishlistOnly;
+  if(showWishlistOnly){
+    showToast("Showing Wishlist");
+    currentFilterCat = "All";
+  }else{
+    showToast("Showing All Products");
+  }
+  populateCategoryChips(currentFilterCat);
+  renderProducts();
+});
+function updateBadges(){
+  const cartQty = cart.reduce((a,b)=> a + b.qty, 0);
+  if(cartCount) cartCount.textContent = cartQty;
+  if(wishlistCount) wishlistCount.textContent = wishlist.length;
+}
+
+/* ===========================
+   TESTIMONIALS SLIDER
+=========================== */
+let testiIndex = 0;
+function slideTestimonials(dir){
+  if(!testiTrack) return;
+  const cards = testiTrack.querySelectorAll(".testi-card");
+  if(!cards.length) return;
+  testiIndex = (testiIndex + dir + cards.length) % cards.length;
+  const w = cards[0].offsetWidth + 16; // gap
+  testiTrack.style.transform = `translateX(${-testiIndex * w}px)`;
+}
+testiPrev && testiPrev.addEventListener("click", ()=> slideTestimonials(-1));
+testiNext && testiNext.addEventListener("click", ()=> slideTestimonials(+1));
+setInterval(()=> slideTestimonials(1), 6000);
+
+/* ===========================
    INIT
 =========================== */
 async function init(){
-  await apiGetAll(); // try backend first; falls back to LS if needed
+  try{
+    setSkeletons();
+    products = await apiGetProducts();
+
+    // 🔒 Ensure each product has a stable unique id (string allowed)
+    products = products.map(p => ({ ...p, id: (p.id ?? cryptoRandomId()) }));
+
+    saveProductsLocal();
+  }catch(e){
+    console.error(e);
+  }finally{
+    clearSkeletons();
+  }
   populateCategoryDropdown();
   populateCategoryChips("All");
   renderProducts();
   refreshAdminUI();
+  updateBadges();
+
+  // Home/About Fade-in on scroll
+  document.addEventListener("scroll", () => {
+    document.querySelectorAll(".fade-in").forEach(section => {
+      const sectionTop = section.getBoundingClientRect().top;
+      const windowHeight = window.innerHeight;
+      if (sectionTop < windowHeight - 100) section.classList.add("show");
+    });
+  });
+  document.dispatchEvent(new Event("scroll"));
 }
 init();
 
-/* ===== Home/About fade-in animation ===== */
-document.addEventListener("scroll", () => {
-  document.querySelectorAll(".fade-in").forEach(section => {
-    const sectionTop = section.getBoundingClientRect().top;
-    const windowHeight = window.innerHeight;
-    if (sectionTop < windowHeight - 100) section.classList.add("show");
-  });
-});
-document.dispatchEvent(new Event("scroll"));
+function cryptoRandomId(){
+  return 'p-' + Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+}
