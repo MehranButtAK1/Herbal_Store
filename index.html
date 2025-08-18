@@ -1,27 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- =========================================================
+       Herbal Store Premium — index.html
+       Compatible with script.js (Phase 3 + 4 + 5)
+       Features: Dark mode, Admin sidebar, Cart drawer, Modal,
+       Products toolbar, Testimonials, Toasts
+  ========================================================== -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Herbal Store Premium</title>
+
+  <!-- Color-scheme hint -->
+  <meta name="color-scheme" content="light dark" />
 
   <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
-
-  <!-- Color-scheme hint for OS toggles -->
-  <meta name="color-scheme" content="light dark" />
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+        crossorigin="anonymous" referrerpolicy="no-referrer"/>
 
   <!-- App CSS -->
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
-  <!-- Header / Navbar -->
+  <!-- =========================================================
+       Header / Navbar
+  ========================================================== -->
   <header>
     <nav class="navbar">
-      <div class="logo">🌿 Herbal Store</div>
+      <a class="logo" href="#home" aria-label="Go to home">🌿 Herbal Store</a>
 
       <button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">
         <i class="fas fa-bars"></i>
@@ -32,8 +43,9 @@
         <li><a href="#about">About</a></li>
         <li><a href="#products">Products</a></li>
         <li><a href="#contact">Contact</a></li>
+
         <li>
-          <!-- Theme toggle (Phase 3 text/icon; JS saves to localStorage `theme`) -->
+          <!-- Theme toggle -->
           <button id="darkToggle" class="icon-btn" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">
             <i class="fa-solid fa-moon"></i>
           </button>
@@ -42,41 +54,42 @@
     </nav>
   </header>
 
-  <!-- Hero / Home (Phase 3 copy preserved) -->
-  <section id="home" class="section hero fade-in">
-    <h1><i class="fas fa-leaf"></i> Welcome to Herbal Store</h1>
+  <!-- =========================================================
+       Hero
+  ========================================================== -->
+  <section id="home" class="section hero fade-in" aria-labelledby="hero-title">
+    <h1 id="hero-title"><i class="fas fa-leaf" aria-hidden="true"></i> Welcome to Herbal Store</h1>
     <p>
-      We are a team of experts — Dr.Salar (FCPS), Dr.Rabia (RPh), Mehran (RPh), and Arslan (RPh) — dedicated to crafting 100% natural herbal products from the purest sources. Our vision is to make premium herbal remedies available at the most affordable prices.
+      We are a team of experts — Dr.Salar (FCPS), Dr.Rabia (RPh), Mehran (RPh), and Arslan (RPh) — dedicated to crafting
+      100% natural herbal products from the purest sources. Our vision is to make premium herbal remedies available at the most
+      affordable prices.
     </p>
   </section>
 
-  <!-- About (Phase 3 copy preserved) -->
-  <section id="about" class="section fade-in">
-    <h2><i class="fas fa-seedling"></i> About Us</h2>
-    <p>
-      At Herbal Store, we believe in the healing power of nature. Every product we create is made with care, precision, and passion. From sourcing the best natural ingredients to ensuring quality in every step, we strive to bring you safe, effective, and affordable herbal solutions.
-    </p>
-  </section>
+  
 
-  <!-- Products -->
-  <section id="products" class="section products-section fade-in">
+  <!-- =========================================================
+       Products
+  ========================================================== -->
+  <section id="products" class="section products-section fade-in" aria-labelledby="products-title">
     <div class="products-header">
-      <h2>Our Products</h2>
+      <h2 id="products-title">Our Products</h2>
 
-      <!-- Toolbar (Phase 4/5 features) -->
-      <div class="toolbar">
+      <!-- Toolbar -->
+      <div class="toolbar" role="toolbar" aria-label="Products toolbar">
         <input id="search" type="search" placeholder="Search products..." aria-label="Search products" />
 
         <!-- Price Range Chip -->
         <div class="price-chip" id="priceChip" aria-label="Price range">
-          <input class="min" type="number" placeholder="Min" inputmode="numeric" />
-          <span class="dash">—</span>
-          <input class="max" type="number" placeholder="Max" inputmode="numeric" />
-          <button class="mini-btn price-apply" type="button">Apply</button>
-          <button class="mini-btn ghost price-clear" type="button">Clear</button>
+          <input class="min" type="number" placeholder="Min" inputmode="numeric" aria-label="Minimum price" />
+          <span class="dash" aria-hidden="true">—</span>
+          <input class="max" type="number" placeholder="Max" inputmode="numeric" aria-label="Maximum price" />
+          <button class="mini-btn price-apply" type="button" aria-label="Apply price filter">Apply</button>
+          <button class="mini-btn ghost price-clear" type="button" aria-label="Clear price filter">Clear</button>
         </div>
 
         <!-- Sort -->
+        <label class="sr-only" for="sort">Sort products</label>
         <select id="sort" class="sort-select" title="Sort products" aria-label="Sort products">
           <option value="featured">Sort: Featured</option>
           <option value="price-asc">Price: Low → High</option>
@@ -101,60 +114,114 @@
     <div id="category-buttons" class="category-buttons" role="tablist" aria-label="Product categories"></div>
 
     <!-- Product Grid -->
-    <div id="product-list" class="product-grid" aria-live="polite"></div>
+    <div id="product-list" class="product-grid" aria-live="polite" aria-busy="false"></div>
 
     <!-- Skeletons (shown while loading) -->
-    <div id="skeletons" class="product-grid" style="display:none">
-      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
-      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
-      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
-      <div class="skel-card"><div class="skel-img"></div><div class="skel-line"></div><div class="skel-line" style="width:60%"></div></div>
+    <div id="skeletons" class="product-grid" style="display:none" aria-hidden="true">
+      <div class="skel-card">
+        <div class="skel-img"></div>
+        <div class="skel-line"></div>
+        <div class="skel-line" style="width:60%"></div>
+      </div>
+      <div class="skel-card">
+        <div class="skel-img"></div>
+        <div class="skel-line"></div>
+        <div class="skel-line" style="width:60%"></div>
+      </div>
+      <div class="skel-card">
+        <div class="skel-img"></div>
+        <div class="skel-line"></div>
+        <div class="skel-line" style="width:60%"></div>
+      </div>
+      <div class="skel-card">
+        <div class="skel-img"></div>
+        <div class="skel-line"></div>
+        <div class="skel-line" style="width:60%"></div>
+      </div>
     </div>
 
     <!-- Empty state -->
     <div id="empty-state" class="empty-state" style="display:none">No products found.</div>
   </section>
-
-  <!-- Testimonials slider (Phase 4/5) -->
-  <section class="section fade-in">
-    <h2>Happy Customers</h2>
+<!-- =========================================================
+       About
+  ========================================================== -->
+  <section id="about" class="section fade-in" aria-labelledby="about-title">
+    <h2 id="about-title"><i class="fas fa-seedling" aria-hidden="true"></i> About Us</h2>
+    <p>
+      At Herbal Store, we believe in the healing power of nature. Every product we create is made with care, precision, and passion.
+      From sourcing the best natural ingredients to ensuring quality in every step, we strive to bring you safe, effective,
+      and affordable herbal solutions.
+    </p>
+  </section>
+  <!-- =========================================================
+       Testimonials slider
+  ========================================================== -->
+  <section class="section fade-in" aria-labelledby="testi-title">
+    <h2 id="testi-title">Happy Customers</h2>
     <div class="testi-wrap">
-      <button id="testiPrev" class="testi-nav" aria-label="Previous"><i class="fa-solid fa-chevron-left"></i></button>
+      <button id="testiPrev" class="testi-nav" aria-label="Previous">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+
       <div id="testiTrack" class="testi-track" aria-live="polite">
-        <div class="testi-card">“Amazing hair oil! Visible results in 3 weeks.” — Ayesha</div>
-        <div class="testi-card">“Natural toner worked great for my skin.” — Zainab</div>
-        <div class="testi-card">“Fast delivery and excellent quality.” — Hammad</div>
-        <div class="testi-card">“Affordable and authentic.” — Fizza</div>
+        <article class="testi-card">“Amazing hair oil! Visible results in 3 weeks.” — Ayesha</article>
+        <article class="testi-card">“Natural toner worked great for my skin.” — Zainab</article>
+        <article class="testi-card">“Fast delivery and excellent quality.” — Hammad</article>
+        <article class="testi-card">“Affordable and authentic.” — Fizza</article>
       </div>
-      <button id="testiNext" class="testi-nav" aria-label="Next"><i class="fa-solid fa-chevron-right"></i></button>
+
+      <button id="testiNext" class="testi-nav" aria-label="Next">
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
     </div>
   </section>
 
-  <!-- Contact (Phase 3 contacts preserved) -->
-  <section id="contact" class="section contact-section fade-in">
-    <h2>Contact Us</h2>
+  <!-- =========================================================
+       Contact
+  ========================================================== -->
+  <section id="contact" class="section contact-section fade-in" aria-labelledby="contact-title">
+    <h2 id="contact-title">Contact Us</h2>
+
     <div class="contact-details">
-      <div class="contact-item">📱 <a href="https://wa.me/923115121207" target="_blank" rel="noopener">+92311 5121207</a></div>
-      <div class="contact-item">📧 <a href="mailto:mehranbutt.k@gmail.com">mehranbutt.k@gmail.com</a></div>
-      <div class="contact-item">🎵 <a href="https://tiktok.com/@mehranbutt_" target="_blank" rel="noopener">@mehranbutt_</a></div>
+      <div class="contact-item">
+        📱
+        <a href="https://wa.me/923115121207" target="_blank" rel="noopener">+92311 5121207</a>
+      </div>
+
+      <div class="contact-item">
+        📧
+        <a href="mailto:mehranbutt.k@gmail.com">mehranbutt.k@gmail.com</a>
+      </div>
+
+      <div class="contact-item">
+        🎵
+        <a href="https://tiktok.com/@mehranbutt_" target="_blank" rel="noopener">@mehranbutt_</a>
+      </div>
     </div>
   </section>
 
-  <!-- Admin Floating Gear -->
+  <!-- =========================================================
+       Admin Floating Gear
+  ========================================================== -->
   <button id="admin-gear" title="Admin" aria-label="Open Admin">
     <i class="fa-solid fa-gear"></i>
   </button>
 
-  <!-- Admin Sidebar -->
+  <!-- =========================================================
+       Admin Sidebar
+  ========================================================== -->
   <aside id="admin-sidebar" aria-hidden="true">
     <div class="admin-header">
       <h3>Admin Panel</h3>
-      <button id="admin-close" class="icon-btn" aria-label="Close Admin"><i class="fa-solid fa-xmark"></i></button>
+      <button id="admin-close" class="icon-btn" aria-label="Close Admin">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
     </div>
 
     <!-- Login -->
     <div id="admin-login">
-      <input type="password" id="admin-pass" placeholder="Enter Admin Password (123)" />
+      <input type="password" id="admin-pass" placeholder="Enter Admin Password (Admin-web-developer)" />
       <button id="admin-login-btn" class="mini-btn">Login</button>
     </div>
 
@@ -199,15 +266,24 @@
     </div>
   </aside>
 
-  <!-- Cart Drawer -->
+  <!-- =========================================================
+       Cart Drawer
+  ========================================================== -->
   <aside id="cart-drawer" aria-hidden="true">
     <div class="cart-head">
       <h3>Your Cart</h3>
-      <button id="cartClose" class="icon-btn" aria-label="Close Cart"><i class="fa-solid fa-xmark"></i></button>
+      <button id="cartClose" class="icon-btn" aria-label="Close Cart">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
     </div>
-    <div id="cartItems" class="cart-items"></div>
+
+    <div id="cartItems" class="cart-items" aria-live="polite"></div>
+
     <div class="cart-foot">
-      <div class="row"><strong>Subtotal</strong><strong id="cartSubtotal">Rs 0</strong></div>
+      <div class="row">
+        <strong>Subtotal</strong>
+        <strong id="cartSubtotal">Rs 0</strong>
+      </div>
       <div class="row gap">
         <button id="cartClear" class="secondary">Clear</button>
         <button id="cartCheckout" class="mini-btn" style="flex:1">Checkout on WhatsApp</button>
@@ -215,7 +291,9 @@
     </div>
   </aside>
 
-  <!-- Product Modal -->
+  <!-- =========================================================
+       Product Modal
+  ========================================================== -->
   <div id="product-modal" class="modal" aria-hidden="true">
     <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <button id="modal-close" class="close" aria-label="Close">&times;</button>
@@ -239,10 +317,14 @@
     </div>
   </div>
 
-  <!-- Toasts -->
-  <div id="toast-container"></div>
+  <!-- =========================================================
+       Toasts
+  ========================================================== -->
+  <div id="toast-container" aria-live="polite"></div>
 
-  <!-- App JS -->
+  <!-- =========================================================
+       App JS (must match classes in this HTML/CSS)
+  ========================================================== -->
   <script src="script.js"></script>
 </body>
             </html>
