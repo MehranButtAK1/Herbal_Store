@@ -1,126 +1,113 @@
 /* =========================================================
-   Herbal Store — script.js (Final PRO Build)
+   Herbal Store — script.js (Stable PRO Build)
    Stack: Vanilla JS + Fetch + localStorage
-   Features:
-   - Theme toggle via :root.dark
-   - Smooth nav + sticky header
-   - Products: search, categories, sort, price-chip
-   - Wishlist (client)
-   - Cart drawer + WhatsApp checkout (client)
-   - Product Quick View modal with qty
-   - Admin panel (sidebar): login (client), CRUD, base64 upload
-   - Backend integration (Railway):
-       • GET /products
-       • POST /products   (requires x-admin-password)
-       • PUT  /products/:id (requires x-admin-password)
-       • DELETE /products/:id (requires x-admin-password)
-   - Skeletons, toasts, deep links (#product-ID), a11y
-   - Defensive fallbacks (placeholder.png; API fallback to cache)
-   - Clean helpers, debounced search, state persistence
+   Notes:
+   - Fully aligned with your CSS theme (variables, classes, ids).
+   - Cart fix: each item tracked by a stable cartKey (server id when available).
+   - Works with backend (Railway) + local cache fallback.
+   - Admin CRUD with x-admin-password header.
+   - Wishlist, Cart Drawer, WhatsApp checkout, Modal, Categories, Sort, Search, Price Filter.
+   - Deep links (#product-ID), skeletons, toasts, fade-ins, a11y.
 ========================================================= */
 
 /* ===================== CONFIG ===================== */
-const API_URL = "https://herbalbackend-production.up.railway.app"; // backend base
-const WA_NUMBER = "923115121207"; // WhatsApp number (no +, no spaces)
+const API_URL = "https://herbalbackend-production.up.railway.app";
+const WA_NUMBER = "923115121207"; // WhatsApp number (no +)
 
-// localStorage keys
+/* localStorage keys */
 const LS_PRODUCTS = "products_v2";
-const LS_WISHLIST = "wishlist_v1";
-const LS_CART = "cart_v1";
+const LS_WISHLIST = "wishlist_v2";
+const LS_CART = "cart_v2";
 const LS_THEME = "theme";
 const LS_ADMIN_MODE = "isAdmin";
-const LS_ADMIN_PASS = "adminPassword"; // stores the password for x-admin-password header
+const LS_ADMIN_PASS = "adminPassword";
 
 /* ===================== STATE ===================== */
 let products = [];
 let isAdmin = localStorage.getItem(LS_ADMIN_MODE) === "true";
-let wishlist = JSON.parse(localStorage.getItem(LS_WISHLIST) || "[]");
-let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");
-
+let wishlist = readJSON(LS_WISHLIST, []);
+let cart = readJSON(LS_CART, []); // [{cartKey, id, name, price, image, qty}]
 let currentFilterCat = "All";
 let currentSearch = "";
 let showWishlistOnly = false;
 let sortMode = "featured";
-
 let priceMin = "";
 let priceMax = "";
-
 let modalProduct = null;
 let testiIndex = 0;
+let editingId = null;
 
 /* ===================== ELEMENTS ===================== */
 // nav / theme
-const navToggle = document.getElementById("menu-toggle");
-const navLinks = document.getElementById("nav-links");
-const darkToggle = document.getElementById("darkToggle");
+const navToggle = qs("#menu-toggle");
+const navLinks = qs("#nav-links");
+const darkToggle = qs("#darkToggle");
 
 // products toolbar & grids
-const searchInput = document.getElementById("search");
-const sortSelect = document.getElementById("sort");
-const categoryButtons = document.getElementById("category-buttons");
-const productList = document.getElementById("product-list");
-const emptyState = document.getElementById("empty-state");
-const skels = document.getElementById("skeletons");
+const searchInput = qs("#search");
+const sortSelect = qs("#sort");
+const categoryButtons = qs("#category-buttons");
+const productList = qs("#product-list");
+const emptyState = qs("#empty-state");
+const skels = qs("#skeletons");
 
 // modal
-const modal = document.getElementById("product-modal");
-const modalClose = document.getElementById("modal-close");
-const modalImg = document.getElementById("modal-image");
-const modalTitle = document.getElementById("modal-title");
-const modalDetails = document.getElementById("modal-details");
-const modalPrice = document.getElementById("modal-price");
-const modalBuy = document.getElementById("modal-buy");
-const modalQtyWrap = document.getElementById("modal-qty");
+const modal = qs("#product-modal");
+const modalClose = qs("#modal-close");
+const modalImg = qs("#modal-image");
+const modalTitle = qs("#modal-title");
+const modalDetails = qs("#modal-details");
+const modalPrice = qs("#modal-price");
+const modalBuy = qs("#modal-buy");
+const modalQtyWrap = qs("#modal-qty");
 const modalQtyMinus = modalQtyWrap?.querySelector(".qty-minus");
 const modalQtyPlus = modalQtyWrap?.querySelector(".qty-plus");
 const modalQtySpan = modalQtyWrap?.querySelector("span");
 
 // admin
-const adminGear = document.getElementById("admin-gear");
-const adminSidebar = document.getElementById("admin-sidebar");
-const adminClose = document.getElementById("admin-close");
-
-const adminLoginWrap = document.getElementById("admin-login");
-const adminPass = document.getElementById("admin-pass");
-const adminLoginBtn = document.getElementById("admin-login-btn");
-
-const productForm = document.getElementById("product-form");
-const adminActionSection = document.getElementById("admin-action-section");
-const adminExitBtn = document.getElementById("admin-exit");
+const adminGear = qs("#admin-gear");
+const adminSidebar = qs("#admin-sidebar");
+const adminClose = qs("#admin-close");
+const adminLoginWrap = qs("#admin-login");
+const adminPass = qs("#admin-pass");
+const adminLoginBtn = qs("#admin-login-btn");
+const productForm = qs("#product-form");
+const adminActionSection = qs("#admin-action-section");
+const adminExitBtn = qs("#admin-exit");
 
 // form inputs
-const inpId = document.getElementById("prod-id");
-const inpName = document.getElementById("prod-name");
-const selCategory = document.getElementById("prod-category-select");
-const inpNewCategory = document.getElementById("prod-category-new");
-const inpPrice = document.getElementById("prod-price");
-const inpImageURL = document.getElementById("prod-image-url");
-const inpImageFile = document.getElementById("prod-image-file");
-const inpDetails = document.getElementById("prod-details");
-const formReset = document.getElementById("form-reset");
+const inpId = qs("#prod-id");
+const inpName = qs("#prod-name");
+const selCategory = qs("#prod-category-select");
+const inpNewCategory = qs("#prod-category-new");
+const inpPrice = qs("#prod-price");
+const inpImageURL = qs("#prod-image-url");
+const inpImageFile = qs("#prod-image-file");
+const inpDetails = qs("#prod-details");
+const formReset = qs("#form-reset");
 
 // cart / wishlist
-const cartBtn = document.getElementById("cartBtn");
-const wishlistBtn = document.getElementById("wishlistBtn");
-const cartDrawer = document.getElementById("cart-drawer");
-const cartClose = document.getElementById("cartClose");
-const cartItems = document.getElementById("cartItems");
-const cartSubtotal = document.getElementById("cartSubtotal");
-const cartCheckout = document.getElementById("cartCheckout");
-const cartClear = document.getElementById("cartClear");
-const cartCount = document.getElementById("cartCount");
-const wishlistCount = document.getElementById("wishlistCount");
+const cartBtn = qs("#cartBtn");
+const wishlistBtn = qs("#wishlistBtn");
+const cartDrawer = qs("#cart-drawer");
+const cartClose = qs("#cartClose");
+const cartItems = qs("#cartItems");
+const cartSubtotal = qs("#cartSubtotal");
+const cartCheckout = qs("#cartCheckout");
+const cartClear = qs("#cartClear");
+const cartCount = qs("#cartCount");
+const wishlistCount = qs("#wishlistCount");
 
 // toasts
-const toastContainer = document.getElementById("toast-container");
+const toastContainer = qs("#toast-container");
 
 // testimonials
-const testiTrack = document.getElementById("testiTrack");
-const testiPrev = document.getElementById("testiPrev");
-const testiNext = document.getElementById("testiNext");
+const testiTrack = qs("#testiTrack");
+const testiPrev = qs("#testiPrev");
+const testiNext = qs("#testiNext");
 
 /* ===================== THEME (via :root.dark) ===================== */
-(function initTheme() {
+(() => {
   const saved = localStorage.getItem(LS_THEME);
   if (saved === "dark") document.documentElement.classList.add("dark");
 })();
@@ -134,15 +121,34 @@ darkToggle?.addEventListener("click", () => {
 
 /* ===================== NAV ===================== */
 navToggle?.addEventListener("click", () => navLinks?.classList.toggle("show"));
-[...document.querySelectorAll(".nav-links a")].forEach((a) => {
+document.querySelectorAll(".nav-links a").forEach((a) => {
   a.addEventListener("click", () => {
-    document.querySelectorAll(".nav-links a").forEach((x) => x.classList.remove("active"));
+    document.querySelectorAll(".nav-links a").forEach((x) =>
+      x.classList.remove("active")
+    );
     a.classList.add("active");
     navLinks?.classList.remove("show");
   });
 });
 
 /* ===================== HELPERS ===================== */
+function qs(sel, root = document) {
+  return root.querySelector(sel);
+}
+function qsa(sel, root = document) {
+  return Array.from(root.querySelectorAll(sel));
+}
+function readJSON(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function saveJSON(key, v) {
+  localStorage.setItem(key, JSON.stringify(v));
+}
 function showToast(msg) {
   if (!toastContainer) return alert(msg);
   const t = document.createElement("div");
@@ -151,30 +157,32 @@ function showToast(msg) {
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 2600);
 }
-
-const saveProductsLocal = () =>
-  localStorage.setItem(LS_PRODUCTS, JSON.stringify(products));
-
-const saveWishlist = () =>
-  localStorage.setItem(LS_WISHLIST, JSON.stringify(wishlist));
-
-const saveCart = () =>
-  localStorage.setItem(LS_CART, JSON.stringify(cart));
-
 const formatRs = (x) => "Rs " + Number(x || 0).toLocaleString();
 
-const uniqueCategories = () =>
-  [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
-
-const debounce = (fn, wait = 300) => {
+function debounce(fn, wait = 300) {
   let t;
   return (...a) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...a), wait);
   };
-};
+}
 
-// Attach admin password header from localStorage (for mutating routes)
+/* Stable unique key for cart items:
+   - Prefer numeric/string server id if present
+   - else derive from name+price+image (hashed-ish) */
+function makeCartKey(p) {
+  if (p.id !== undefined && p.id !== null && p.id !== "") {
+    return `id:${String(p.id)}`;
+  }
+  const raw = `${p.name}__${p.price}__${p.image || ""}`;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash * 31 + raw.charCodeAt(i)) | 0;
+  }
+  return `vk:${hash}`;
+}
+
+/* Attach admin header if available */
 function adminHeaders(extra = {}) {
   const pwd = localStorage.getItem(LS_ADMIN_PASS) || "";
   const headers = { ...extra };
@@ -182,7 +190,7 @@ function adminHeaders(extra = {}) {
   return headers;
 }
 
-// Generic safe fetch wrapper with JSON + error handling
+/* Safe fetch wrapper */
 async function safeFetch(url, options = {}) {
   try {
     const res = await fetch(url, options);
@@ -192,7 +200,6 @@ async function safeFetch(url, options = {}) {
       err.status = res.status;
       throw err;
     }
-    // 204 no content guard
     const ct = res.headers.get("content-type") || "";
     if (!ct.includes("application/json")) return null;
     return await res.json();
@@ -204,16 +211,15 @@ async function safeFetch(url, options = {}) {
 
 /* ===================== API + FALLBACK ===================== */
 async function apiGetProducts() {
-  const localSeed = JSON.parse(localStorage.getItem(LS_PRODUCTS) || "null");
+  const fromLS = readJSON(LS_PRODUCTS, null);
   try {
-    if (skels) skels.style.display = "grid";
+    skels && (skels.style.display = "grid");
     const data = await safeFetch(`${API_URL}/products`, { cache: "no-store" });
-    localStorage.setItem(LS_PRODUCTS, JSON.stringify(data || []));
+    saveJSON(LS_PRODUCTS, data || []);
     return data || [];
   } catch (e) {
-    console.warn("API failed, falling back to local cache.", e);
-    if (localSeed?.length) return localSeed;
-    // very small initial seed
+    console.warn("API failed, using cache/local seed.", e);
+    if (fromLS && fromLS.length) return fromLS;
     return [
       {
         id: 1,
@@ -250,32 +256,24 @@ async function apiGetProducts() {
       }
     ];
   } finally {
-    if (skels) skels.style.display = "none";
+    skels && (skels.style.display = "none");
   }
 }
 
 async function apiCreateProduct(p) {
   return safeFetch(`${API_URL}/products`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...adminHeaders()
-    },
+    headers: { "Content-Type": "application/json", ...adminHeaders() },
     body: JSON.stringify(p)
   });
 }
-
 async function apiUpdateProduct(id, p) {
   return safeFetch(`${API_URL}/products/${id}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...adminHeaders()
-    },
+    headers: { "Content-Type": "application/json", ...adminHeaders() },
     body: JSON.stringify(p)
   });
 }
-
 async function apiDeleteProduct(id) {
   return safeFetch(`${API_URL}/products/${id}`, {
     method: "DELETE",
@@ -283,14 +281,17 @@ async function apiDeleteProduct(id) {
   });
 }
 
-/* ===================== SEARCH ===================== */
+/* ===================== PRODUCTS / FILTERS ===================== */
+function uniqueCategories() {
+  return [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
+}
+
 const onSearch = debounce((v) => {
   currentSearch = (v || "").toLowerCase();
   renderProducts();
 }, 220);
 searchInput?.addEventListener("input", (e) => onSearch(e.target.value));
 
-/* ===================== SORT ===================== */
 sortSelect?.addEventListener("change", () => {
   sortMode = sortSelect.value;
   renderProducts();
@@ -307,13 +308,13 @@ function applySort(list) {
     case "name-desc":
       return L.sort((a, b) => String(b.name).localeCompare(String(a.name)));
     default:
-      return L; // featured
+      return L;
   }
 }
 
-/* ===================== CATEGORY CHIPS ===================== */
 function populateCategoryChips(active = "All") {
   currentFilterCat = active;
+  if (!categoryButtons) return;
   categoryButtons.innerHTML = "";
   const base = ["All", ...uniqueCategories()];
   const cats = showWishlistOnly ? ["Wishlist"] : base;
@@ -337,9 +338,8 @@ function populateCategoryChips(active = "All") {
   });
 }
 
-/* ===================== PRICE CHIP (inside toolbar) ===================== */
 function hookPriceChip() {
-  const chip = document.getElementById("priceChip");
+  const chip = qs("#priceChip");
   if (!chip) return;
   const minI = chip.querySelector(".min");
   const maxI = chip.querySelector(".max");
@@ -367,15 +367,13 @@ function hookPriceChip() {
   );
 }
 
-/* ===================== FILTERED LIST ===================== */
 function filteredList() {
   let list = [...products];
 
-  // wishlist or category filter
-  if (showWishlistOnly) list = list.filter((p) => wishlist.includes(p.id));
-  else if (currentFilterCat !== "All") list = list.filter((p) => p.category === currentFilterCat);
+  if (showWishlistOnly) list = list.filter((p) => wishlist.includes(safeId(p)));
+  else if (currentFilterCat !== "All")
+    list = list.filter((p) => p.category === currentFilterCat);
 
-  // search
   if (currentSearch) {
     const s = currentSearch;
     list = list.filter(
@@ -386,7 +384,6 @@ function filteredList() {
     );
   }
 
-  // price
   const min = priceMin !== "" ? Number(priceMin) : null;
   const max = priceMax !== "" ? Number(priceMax) : null;
   if (min !== null) list = list.filter((p) => (+p.price || 0) >= min);
@@ -395,30 +392,36 @@ function filteredList() {
   return applySort(list);
 }
 
+function safeId(p) {
+  return p.id ?? makeCartKey(p); // prefer server id, else derived
+}
+
 /* ===================== RENDER PRODUCTS ===================== */
 function renderProducts() {
   hookPriceChip();
 
   const list = filteredList();
+  if (!productList) return;
   productList.innerHTML = "";
-  emptyState && (emptyState.style.display = list.length ? "none" : "block");
+  if (emptyState) emptyState.style.display = list.length ? "none" : "block";
 
   list.forEach((product) => {
+    const pid = safeId(product);
+
     const card = document.createElement("div");
     card.className = "product-card";
-    card.id = `product-${product.id}`;
+    card.id = `product-${pid}`;
 
-    // image wrapper
+    // image area
     const imgWrap = document.createElement("div");
     imgWrap.className = "product-image";
 
-    // overlay: wishlist (left) + admin (right)
+    // overlay actions container
     const overlay = document.createElement("div");
     overlay.className = "overlay-actions";
 
     const left = document.createElement("div");
     left.className = "overlay-left";
-
     const right = document.createElement("div");
     right.className = "overlay-right";
 
@@ -426,48 +429,44 @@ function renderProducts() {
     const heart = document.createElement("button");
     heart.className = "overlay-btn heart";
     heart.innerHTML = '<i class="fa-regular fa-heart"></i>';
-    if (wishlist.includes(product.id)) heart.classList.add("active");
+    if (wishlist.includes(pid)) heart.classList.add("active");
     heart.onclick = (e) => {
       e.stopPropagation();
-      if (wishlist.includes(product.id)) {
-        wishlist = wishlist.filter((id) => id !== product.id);
+      if (wishlist.includes(pid)) {
+        wishlist = wishlist.filter((id) => id !== pid);
         heart.classList.remove("active");
         showToast("Removed from wishlist");
       } else {
-        wishlist.push(product.id);
+        wishlist.push(pid);
         heart.classList.add("active");
         showToast("Added to wishlist");
       }
-      saveWishlist();
+      saveJSON(LS_WISHLIST, wishlist);
       updateBadges();
       if (showWishlistOnly) renderProducts();
     };
     left.appendChild(heart);
 
-    // admin edit/delete (only if isAdmin flag ON)
     if (isAdmin) {
       const edit = document.createElement("button");
       edit.className = "overlay-btn";
       edit.innerHTML = '<i class="fa-solid fa-pen"></i>';
-
-      const del = document.createElement("button");
-      del.className = "overlay-btn danger";
-      del.innerHTML = '<i class="fa-solid fa-trash"></i>';
-
       edit.onclick = (e) => {
         e.stopPropagation();
         startEdit(product);
       };
 
+      const del = document.createElement("button");
+      del.className = "overlay-btn danger";
+      del.innerHTML = '<i class="fa-solid fa-trash"></i>';
       del.onclick = async (e) => {
         e.stopPropagation();
         if (!confirm(`Delete "${product.name}"?`)) return;
-
         try {
           const r = await apiDeleteProduct(product.id);
           if (r && r.success) {
             products = products.filter((p) => p.id !== product.id);
-            saveProductsLocal();
+            saveJSON(LS_PRODUCTS, products);
             populateCategoryChips(currentFilterCat);
             renderProducts();
             populateCategoryDropdown();
@@ -486,20 +485,18 @@ function renderProducts() {
 
     overlay.append(left, right);
 
-    // image
+    // image element
     const img = document.createElement("img");
     img.src = product.image;
     img.alt = product.name;
     img.loading = "lazy";
     img.decoding = "async";
-    img.onerror = () => {
-      img.src = "placeholder.png";
-    };
+    img.onerror = () => (img.src = "placeholder.png");
 
     imgWrap.append(overlay, img);
     imgWrap.onclick = () => showDetails(product);
 
-    // content
+    /* content */
     const content = document.createElement("div");
 
     const h3 = document.createElement("h3");
@@ -511,7 +508,7 @@ function renderProducts() {
     price.className = "price";
     price.textContent = formatRs(product.price);
 
-    // qty chooser (in card)
+    // qty chooser
     const qty = document.createElement("div");
     qty.className = "quantity-control";
     const minus = document.createElement("button");
@@ -522,15 +519,11 @@ function renderProducts() {
     const plus = document.createElement("button");
     plus.className = "qty-plus";
     plus.textContent = "+";
-    minus.onclick = () => {
-      val.textContent = String(Math.max(1, +val.textContent - 1));
-    };
-    plus.onclick = () => {
-      val.textContent = String(+val.textContent + 1);
-    };
+    minus.onclick = () => (val.textContent = String(Math.max(1, +val.textContent - 1)));
+    plus.onclick = () => (val.textContent = String(+val.textContent + 1));
     qty.append(minus, val, plus);
 
-    // actions row
+    // actions
     const actions = document.createElement("div");
     actions.className = "actions";
 
@@ -566,16 +559,21 @@ function renderProducts() {
 /* ===================== MODAL ===================== */
 function showDetails(p) {
   modalProduct = p;
-  modalImg.src = p.image;
-  modalImg.alt = p.name;
-  modalTitle.textContent = p.name;
-  modalDetails.textContent = p.details || "";
-  modalPrice.textContent = formatRs(p.price);
+  if (modalImg) {
+    modalImg.src = p.image;
+    modalImg.alt = p.name;
+  }
+  if (modalTitle) modalTitle.textContent = p.name;
+  if (modalDetails) modalDetails.textContent = p.details || "";
+  if (modalPrice) modalPrice.textContent = formatRs(p.price);
   if (modalQtySpan) modalQtySpan.textContent = "1";
-  modal.style.display = "flex";
-  modal.setAttribute("aria-hidden", "false");
+  if (modal) {
+    modal.style.display = "flex";
+    modal.setAttribute("aria-hidden", "false");
+  }
 }
 function closeModal() {
+  if (!modal) return;
   modal.style.display = "none";
   modal.setAttribute("aria-hidden", "true");
   modalProduct = null;
@@ -601,9 +599,8 @@ modalBuy?.addEventListener("click", () => {
 });
 
 /* ===================== ADMIN ===================== */
-// We do not hard-check password on client. We only store whatever user enters in localStorage,
-// and the server validates it on POST/PUT/DELETE using "x-admin-password".
 function refreshAdminUI() {
+  if (!adminLoginWrap || !productForm || !adminActionSection) return;
   if (isAdmin) {
     adminLoginWrap.style.display = "none";
     productForm.style.display = "flex";
@@ -613,35 +610,28 @@ function refreshAdminUI() {
     productForm.style.display = "none";
     adminActionSection.style.display = "none";
   }
-  // re-render so edit/delete overlay appears/disappears
-  renderProducts();
+  renderProducts(); // so edit/delete overlay updates
 }
 
 adminGear?.addEventListener("click", () => {
-  adminSidebar.classList.add("open");
-  adminSidebar.setAttribute("aria-hidden", "false");
+  adminSidebar?.classList.add("open");
+  adminSidebar?.setAttribute("aria-hidden", "false");
   refreshAdminUI();
 });
-
 adminClose?.addEventListener("click", () => {
-  adminSidebar.classList.remove("open");
-  adminSidebar.setAttribute("aria-hidden", "true");
+  adminSidebar?.classList.remove("open");
+  adminSidebar?.setAttribute("aria-hidden", "true");
 });
-
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    adminSidebar.classList.remove("open");
-    adminSidebar.setAttribute("aria-hidden", "true");
+    adminSidebar?.classList.remove("open");
+    adminSidebar?.setAttribute("aria-hidden", "true");
   }
 });
 
 adminLoginBtn?.addEventListener("click", () => {
   const pwd = (adminPass.value || "").trim();
-  if (!pwd) {
-    alert("Enter admin password.");
-    return;
-  }
-  // Save to localStorage and enable admin UI.
+  if (!pwd) return alert("Enter admin password.");
   localStorage.setItem(LS_ADMIN_PASS, pwd);
   isAdmin = true;
   localStorage.setItem(LS_ADMIN_MODE, "true");
@@ -653,13 +643,13 @@ adminLoginBtn?.addEventListener("click", () => {
 adminExitBtn?.addEventListener("click", () => {
   isAdmin = false;
   localStorage.setItem(LS_ADMIN_MODE, "false");
-  // clear stored password for extra safety
   localStorage.removeItem(LS_ADMIN_PASS);
   refreshAdminUI();
   showToast("Admin mode OFF");
 });
 
 function populateCategoryDropdown() {
+  if (!selCategory) return;
   selCategory.innerHTML = `<option value="">Select a category</option>`;
   uniqueCategories().forEach((cat) => {
     const o = document.createElement("option");
@@ -668,8 +658,6 @@ function populateCategoryDropdown() {
     selCategory.appendChild(o);
   });
 }
-
-let editingId = null;
 
 productForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -690,14 +678,12 @@ productForm?.addEventListener("submit", async (e) => {
   }
 
   const category = newCategory || categorySelect;
-
   let imageData = url;
   if (file) {
     try {
       imageData = await fileToBase64(file);
     } catch {
-      showToast("Image read failed.");
-      return;
+      return showToast("Image read failed.");
     }
   }
 
@@ -716,7 +702,7 @@ productForm?.addEventListener("submit", async (e) => {
       showToast("Product added");
     }
 
-    saveProductsLocal();
+    saveJSON(LS_PRODUCTS, products);
     productForm.reset();
     inpId.value = "";
     selCategory.value = "";
@@ -726,11 +712,8 @@ productForm?.addEventListener("submit", async (e) => {
     populateCategoryChips(currentFilterCat);
     renderProducts();
   } catch (err) {
-    if (err?.status === 401) {
-      showToast("Unauthorized — wrong admin password.");
-    } else {
-      alert("Save failed (API).");
-    }
+    if (err?.status === 401) showToast("Unauthorized — wrong admin password.");
+    else alert("Save failed (API).");
   } finally {
     editingId = null;
   }
@@ -745,22 +728,22 @@ formReset?.addEventListener("click", () => {
 
 function startEdit(p) {
   editingId = p.id;
-  inpId.value = p.id;
-  inpName.value = p.name;
-  inpPrice.value = p.price;
-  inpDetails.value = p.details;
+  inpId.value = p.id ?? "";
+  inpName.value = p.name ?? "";
+  inpPrice.value = p.price ?? "";
+  inpDetails.value = p.details ?? "";
 
   if (uniqueCategories().includes(p.category)) {
     selCategory.value = p.category;
     inpNewCategory.value = "";
   } else {
     selCategory.value = "";
-    inpNewCategory.value = p.category;
+    inpNewCategory.value = p.category || "";
   }
-  // Only put URL back if it wasn't base64
-  inpImageURL.value = p.image && !String(p.image).startsWith("data:") ? p.image : "";
+  inpImageURL.value =
+    p.image && !String(p.image).startsWith("data:") ? p.image : "";
 
-  adminSidebar.classList.add("open");
+  adminSidebar?.classList.add("open");
   refreshAdminUI();
 }
 
@@ -773,26 +756,38 @@ function fileToBase64(file) {
   });
 }
 
-/* ===================== CART ===================== */
+/* ===================== CART (FIXED UNIQUE ITEMS) ===================== */
 function addToCart(p, qty = 1) {
-  const ex = cart.find((i) => i.id === p.id);
-  if (ex) ex.qty += qty;
-  else cart.push({ id: p.id, name: p.name, price: p.price, image: p.image, qty });
-  saveCart();
+  const cartKey = makeCartKey(p); // stable per product
+  const existing = cart.find((i) => i.cartKey === cartKey);
+  if (existing) {
+    existing.qty += qty;
+  } else {
+    cart.push({
+      cartKey,
+      id: p.id ?? null,
+      name: p.name,
+      price: +p.price || 0,
+      image: p.image,
+      qty: Math.max(1, qty)
+    });
+  }
+  saveJSON(LS_CART, cart);
 }
-function removeFromCart(id) {
-  cart = cart.filter((i) => i.id !== id);
-  saveCart();
+function removeFromCart(cartKey) {
+  cart = cart.filter((i) => i.cartKey !== cartKey);
+  saveJSON(LS_CART, cart);
 }
-function updateCartQty(id, delta) {
-  const it = cart.find((i) => i.id === id);
+function updateCartQty(cartKey, delta) {
+  const it = cart.find((i) => i.cartKey === cartKey);
   if (!it) return;
   it.qty = Math.max(1, it.qty + delta);
-  saveCart();
+  saveJSON(LS_CART, cart);
 }
 const cartTotal = () => cart.reduce((s, i) => s + i.price * i.qty, 0);
 
 function renderCart() {
+  if (!cartItems) return;
   cartItems.innerHTML = "";
   if (!cart.length) {
     cartItems.innerHTML = '<div class="empty">Your cart is empty.</div>';
@@ -811,30 +806,31 @@ function renderCart() {
             <button class="c-plus" aria-label="Increase">+</button>
           </div>
         </div>
-        <button class="c-remove" title="Remove" aria-label="Remove">&times;</button>`;
+        <button class="c-remove" title="Remove" aria-label="Remove">&times;</button>
+      `;
       row.querySelector(".c-minus").onclick = () => {
-        updateCartQty(it.id, -1);
+        updateCartQty(it.cartKey, -1);
         renderCart();
         updateBadges();
       };
       row.querySelector(".c-plus").onclick = () => {
-        updateCartQty(it.id, 1);
+        updateCartQty(it.cartKey, 1);
         renderCart();
         updateBadges();
       };
       row.querySelector(".c-remove").onclick = () => {
-        removeFromCart(it.id);
+        removeFromCart(it.cartKey);
         renderCart();
         updateBadges();
       };
       cartItems.appendChild(row);
     });
   }
-  cartSubtotal.textContent = formatRs(cartTotal());
+  if (cartSubtotal) cartSubtotal.textContent = formatRs(cartTotal());
 }
 
-const openCart = () => cartDrawer.classList.add("open");
-const closeCart = () => cartDrawer.classList.remove("open");
+const openCart = () => cartDrawer?.classList.add("open");
+const closeCart = () => cartDrawer?.classList.remove("open");
 
 cartBtn?.addEventListener("click", () => {
   renderCart();
@@ -844,14 +840,16 @@ cartClose?.addEventListener("click", closeCart);
 cartClear?.addEventListener("click", () => {
   if (cart.length && confirm("Clear cart?")) {
     cart = [];
-    saveCart();
+    saveJSON(LS_CART, cart);
     renderCart();
     updateBadges();
   }
 });
 cartCheckout?.addEventListener("click", () => {
   if (!cart.length) return;
-  const lines = cart.map((i) => `• ${i.qty} x ${i.name} — Rs ${i.price * i.qty}`);
+  const lines = cart.map(
+    (i) => `• ${i.qty} x ${i.name} — Rs ${i.price * i.qty}`
+  );
   const msg = `Hello! I want to order:\n${lines.join("\n")}\n\nTotal: Rs ${cartTotal()}`;
   window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
 });
@@ -885,23 +883,22 @@ setInterval(() => slideTestimonials(1), 6000);
 
 /* ===================== SCROLL FADE-IN ===================== */
 document.addEventListener("scroll", () => {
-  document.querySelectorAll(".fade-in").forEach((s) => {
+  qsa(".fade-in").forEach((s) => {
     const t = s.getBoundingClientRect().top;
     if (t < window.innerHeight - 100) s.classList.add("show");
   });
 });
 document.dispatchEvent(new Event("scroll"));
 
-/* ===================== DEEP LINK (scroll to product-{id}) ===================== */
+/* ===================== DEEP LINK (#product-ID) ===================== */
 window.addEventListener("hashchange", () => {
-  const id = location.hash.replace("#product-", "");
-  if (id) {
-    const el = document.getElementById(`product-${id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      el.classList.add("pulse");
-      setTimeout(() => el.classList.remove("pulse"), 1000);
-    }
+  const id = decodeURIComponent(location.hash.replace("#product-", ""));
+  if (!id) return;
+  const el = document.getElementById(`product-${id}`);
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.add("pulse");
+    setTimeout(() => el.classList.remove("pulse"), 1000);
   }
 });
 
@@ -909,7 +906,8 @@ window.addEventListener("hashchange", () => {
 async function init() {
   try {
     products = await apiGetProducts();
-    saveProductsLocal();
+    // Persist cache
+    saveJSON(LS_PRODUCTS, products);
   } catch (e) {
     console.error(e);
   }
@@ -922,34 +920,38 @@ async function init() {
 }
 init();
 
-/* ===================== OPTIONAL: SMALL UTIL EXTRAS ===================== */
-/* Not strictly required for core features, but helpful for UX/debug */
-
-// Ctrl+/ to quickly toggle admin sidebar (desktop only)
+/* ===================== EXTRAS ===================== */
+// Ctrl+/ toggles admin sidebar
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "/") {
-    const open = adminSidebar.classList.contains("open");
+    const open = adminSidebar?.classList.contains("open");
     if (open) {
-      adminSidebar.classList.remove("open");
-      adminSidebar.setAttribute("aria-hidden", "true");
+      adminSidebar?.classList.remove("open");
+      adminSidebar?.setAttribute("aria-hidden", "true");
     } else {
-      adminSidebar.classList.add("open");
-      adminSidebar.setAttribute("aria-hidden", "false");
+      adminSidebar?.classList.add("open");
+      adminSidebar?.setAttribute("aria-hidden", "false");
       refreshAdminUI();
     }
   }
 });
-
-// Basic network offline/online toasts
-window.addEventListener("offline", () => showToast("You are offline. Some features may not work."));
+// Offline/online toasts
+window.addEventListener("offline", () =>
+  showToast("You are offline. Some features may not work.")
+);
 window.addEventListener("online", () => showToast("Back online!"));
-
-// Defensive: ensure counts visible even if DOM delayed
+// Defensive initial badges
 setTimeout(updateBadges, 0);
-
-// Warn if admin mode is on but password is missing
+// Warn if admin on but no password saved
 if (isAdmin && !localStorage.getItem(LS_ADMIN_PASS)) {
-  console.warn("Admin mode ON but no password stored — server writes will fail (401).");
+  console.warn(
+    "Admin mode ON but no password stored — server writes will fail (401)."
+  );
 }
 
-/* ===================== END OF FILE ===================== */
+/* ===================== UTILS ===================== */
+function assertNumber(v, def = 0) {
+  const n = +v;
+  return Number.isFinite(n) ? n : def;
+}
+/* END */
