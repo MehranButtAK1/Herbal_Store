@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <!-- =========================================================
-       Herbal Store Premium — index.html
-       Compatible with script.js (Phase 3 + 4 + 5)
-       Features: Dark mode, Admin sidebar, Cart drawer, Modal,
-       Products toolbar, Testimonials, Toasts
+       Herbal Store Premium — index.html (Backend-ready)
+       Matches your CSS classes & structure
+       Sections: Navbar, Hero (Welcome), Products, About, Testimonials,
+                 Contact, Admin Sidebar, Cart Drawer, Product Modal, Toasts
   ========================================================== -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -22,7 +22,7 @@
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
         crossorigin="anonymous" referrerpolicy="no-referrer"/>
 
-  <!-- App CSS -->
+  <!-- App CSS (use the CSS you shared) -->
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -31,21 +31,19 @@
        Header / Navbar
   ========================================================== -->
   <header>
-    <nav class="navbar">
+    <nav class="navbar" aria-label="Main">
       <a class="logo" href="#home" aria-label="Go to home">🌿 Herbal Store</a>
 
       <button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">
         <i class="fas fa-bars"></i>
       </button>
 
-      <ul class="nav-links" id="nav-links">
-        <li><a href="#home" class="active">Home</a></li>
-        <li><a href="#about">About</a></li>
-        <li><a href="#products">Products</a></li>
-        <li><a href="#contact">Contact</a></li>
-
-        <li>
-          <!-- Theme toggle -->
+      <ul class="nav-links" id="nav-links" role="menubar">
+        <li role="none"><a role="menuitem" href="#home" class="active">Home</a></li>
+        <li role="none"><a role="menuitem" href="#about">About</a></li>
+        <li role="none"><a role="menuitem" href="#products">Products</a></li>
+        <li role="none"><a role="menuitem" href="#contact">Contact</a></li>
+        <li role="none">
           <button id="darkToggle" class="icon-btn" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">
             <i class="fa-solid fa-moon"></i>
           </button>
@@ -55,7 +53,7 @@
   </header>
 
   <!-- =========================================================
-       Hero
+       Hero (WELCOME) — Keep text EXACT as requested
   ========================================================== -->
   <section id="home" class="section hero fade-in" aria-labelledby="hero-title">
     <h1 id="hero-title"><i class="fas fa-leaf" aria-hidden="true"></i> Welcome to Herbal Store</h1>
@@ -66,26 +64,28 @@
     </p>
   </section>
 
-  
-
   <!-- =========================================================
        Products
   ========================================================== -->
   <section id="products" class="section products-section fade-in" aria-labelledby="products-title">
     <div class="products-header">
-      <h2 id="products-title">Our Products</h2>
+      <h2 id="products-title"><i class="fa-solid fa-store" aria-hidden="true"></i> Our Products</h2>
 
       <!-- Toolbar -->
       <div class="toolbar" role="toolbar" aria-label="Products toolbar">
-        <input id="search" type="search" placeholder="Search products..." aria-label="Search products" />
+        <!-- Search -->
+        <label class="sr-only" for="search">Search products</label>
+        <input id="search" type="search" placeholder="Search products..." aria-label="Search products" autocomplete="off"/>
 
         <!-- Price Range Chip -->
         <div class="price-chip" id="priceChip" aria-label="Price range">
-          <input class="min" type="number" placeholder="Min" inputmode="numeric" aria-label="Minimum price" />
+          <label class="sr-only" for="minPrice">Minimum price</label>
+          <input id="minPrice" class="min" type="number" placeholder="Min" inputmode="numeric" />
           <span class="dash" aria-hidden="true">—</span>
-          <input class="max" type="number" placeholder="Max" inputmode="numeric" aria-label="Maximum price" />
-          <button class="mini-btn price-apply" type="button" aria-label="Apply price filter">Apply</button>
-          <button class="mini-btn ghost price-clear" type="button" aria-label="Clear price filter">Clear</button>
+          <label class="sr-only" for="maxPrice">Maximum price</label>
+          <input id="maxPrice" class="max" type="number" placeholder="Max" inputmode="numeric" />
+          <button class="mini-btn price-apply" id="priceApply" type="button" aria-label="Apply price filter">Apply</button>
+          <button class="mini-btn ghost price-clear" id="priceClear" type="button" aria-label="Clear price filter">Clear</button>
         </div>
 
         <!-- Sort -->
@@ -110,10 +110,10 @@
       </div>
     </div>
 
-    <!-- Category Chips -->
+    <!-- Category Chips (rendered by JS from backend categories) -->
     <div id="category-buttons" class="category-buttons" role="tablist" aria-label="Product categories"></div>
 
-    <!-- Product Grid -->
+    <!-- Product Grid (rendered by JS) -->
     <div id="product-list" class="product-grid" aria-live="polite" aria-busy="false"></div>
 
     <!-- Skeletons (shown while loading) -->
@@ -143,8 +143,9 @@
     <!-- Empty state -->
     <div id="empty-state" class="empty-state" style="display:none">No products found.</div>
   </section>
-<!-- =========================================================
-       About
+
+  <!-- =========================================================
+       About — Keep text EXACT as requested
   ========================================================== -->
   <section id="about" class="section fade-in" aria-labelledby="about-title">
     <h2 id="about-title"><i class="fas fa-seedling" aria-hidden="true"></i> About Us</h2>
@@ -154,11 +155,12 @@
       and affordable herbal solutions.
     </p>
   </section>
+
   <!-- =========================================================
        Testimonials slider
   ========================================================== -->
   <section class="section fade-in" aria-labelledby="testi-title">
-    <h2 id="testi-title">Happy Customers</h2>
+    <h2 id="testi-title"><i class="fa-regular fa-face-smile" aria-hidden="true"></i> Happy Customers</h2>
     <div class="testi-wrap">
       <button id="testiPrev" class="testi-nav" aria-label="Previous">
         <i class="fa-solid fa-chevron-left"></i>
@@ -181,7 +183,7 @@
        Contact
   ========================================================== -->
   <section id="contact" class="section contact-section fade-in" aria-labelledby="contact-title">
-    <h2 id="contact-title">Contact Us</h2>
+    <h2 id="contact-title"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> Contact Us</h2>
 
     <div class="contact-details">
       <div class="contact-item">
@@ -209,7 +211,7 @@
   </button>
 
   <!-- =========================================================
-       Admin Sidebar
+       Admin Sidebar (login + product form)
   ========================================================== -->
   <aside id="admin-sidebar" aria-hidden="true">
     <div class="admin-header">
@@ -220,17 +222,19 @@
     </div>
 
     <!-- Login -->
-    <div id="admin-login">
-      <input type="password" id="admin-pass" placeholder="Enter Admin Password (Admin-web-developer)" />
+    <div id="admin-login" role="form" aria-label="Admin Login">
+      <input type="password" id="admin-pass" placeholder="Enter Admin Password (Admin-web-developer)" autocomplete="current-password"/>
       <button id="admin-login-btn" class="mini-btn">Login</button>
+      <small class="hint">Backend route: <code>POST /api/auth/login</code></small>
     </div>
 
     <!-- Product Form (Create / Update) -->
-    <form id="product-form" style="display:none">
+    <form id="product-form" style="display:none" novalidate>
       <h4>Add / Edit Product</h4>
 
       <input type="hidden" id="prod-id" />
 
+      <label class="sr-only" for="prod-name">Product Name</label>
       <input type="text" id="prod-name" placeholder="Product Name" required />
 
       <label>Choose Existing Category</label>
@@ -241,23 +245,27 @@
       <label>Or Create New Category</label>
       <input type="text" id="prod-category-new" placeholder="New Category Name" />
 
+      <label class="sr-only" for="prod-price">Price</label>
       <input type="number" id="prod-price" placeholder="Price (Rs)" step="0.01" required />
 
+      <label class="sr-only" for="prod-image-url">Image</label>
       <input type="text" id="prod-image-url" placeholder="Image filename or URL (e.g. apricot.jpg)" />
 
-      <label class="file-label">
+      <label class="file-label" for="prod-image-file">
         <input type="file" id="prod-image-file" accept="image/*" />
         <span><i class="fa-solid fa-image"></i> Upload Image (optional)</span>
       </label>
 
+      <label class="sr-only" for="prod-details">Details</label>
       <textarea id="prod-details" placeholder="Product Details" required></textarea>
 
       <div class="form-actions">
         <button type="submit" class="mini-btn">Save Product</button>
         <button type="button" id="form-reset" class="secondary">Reset</button>
       </div>
+
       <p class="hint">
-        Tip: Use either a simple filename (e.g., <code>apricot.jpg</code>) or upload a file.
+        Images: simple filename (served from /images) or a full URL. Backend route: <code>POST /api/products</code> (create) / <code>PUT /api/products/:id</code> (update).
       </p>
     </form>
 
@@ -323,7 +331,27 @@
   <div id="toast-container" aria-live="polite"></div>
 
   <!-- =========================================================
-       App JS (must match classes in this HTML/CSS)
+       Backend Config (optional)
+       Change window.APP_CONFIG.baseURL to point to your backend
+  ========================================================== -->
+  <script>
+    window.APP_CONFIG = {
+      baseURL: "", // e.g. "https://your-domain.com" (blank → same origin)
+      routes: {
+        products: "/api/products",
+        categories: "/api/categories",
+        login: "/api/auth/login",
+        upload: "/api/upload",
+        wishlist: "/api/wishlist",
+        cartSync: "/api/cart/sync"
+      },
+      whatsappNumber: "923115121207" // used in checkout deep-link
+    };
+  </script>
+
+  <!-- =========================================================
+       App JS (matches classes/ids in this HTML + your CSS)
+       I’ll send full script.js next (connects to backend).
   ========================================================== -->
   <script src="script.js"></script>
 </body>
