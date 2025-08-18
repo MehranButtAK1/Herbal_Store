@@ -1,17 +1,39 @@
-const API_URL = "https://herbalbackend-production.up.railway.app"; // backend base
-const WA_NUMBER = "923115121207"; // WhatsApp number (no +)
+/* =========================================================
+   Herbal Store — script.js (Final PRO Build)
+   Stack: Vanilla JS + Fetch + localStorage
+   Features:
+   - Theme toggle via :root.dark
+   - Smooth nav + sticky header
+   - Products: search, categories, sort, price-chip
+   - Wishlist (client)
+   - Cart drawer + WhatsApp checkout (client)
+   - Product Quick View modal with qty
+   - Admin panel (sidebar): login (client), CRUD, base64 upload
+   - Backend integration (Railway):
+       • GET /products
+       • POST /products   (requires x-admin-password)
+       • PUT  /products/:id (requires x-admin-password)
+       • DELETE /products/:id (requires x-admin-password)
+   - Skeletons, toasts, deep links (#product-ID), a11y
+   - Defensive fallbacks (placeholder.png; API fallback to cache)
+   - Clean helpers, debounced search, state persistence
+========================================================= */
 
+/* ===================== CONFIG ===================== */
+const API_URL = "https://herbalbackend-production.up.railway.app"; // backend base
+const WA_NUMBER = "923115121207"; // WhatsApp number (no +, no spaces)
+
+// localStorage keys
 const LS_PRODUCTS = "products_v2";
 const LS_WISHLIST = "wishlist_v1";
 const LS_CART = "cart_v1";
 const LS_THEME = "theme";
-const LS_ADMIN = "isAdmin";
+const LS_ADMIN_MODE = "isAdmin";
+const LS_ADMIN_PASS = "adminPassword"; // stores the password for x-admin-password header
 
-const ADMIN_PASSWORD = "123"; // change in prod
-
-/* ====== STATE ====== */
+/* ===================== STATE ===================== */
 let products = [];
-let isAdmin = localStorage.getItem(LS_ADMIN) === "true";
+let isAdmin = localStorage.getItem(LS_ADMIN_MODE) === "true";
 let wishlist = JSON.parse(localStorage.getItem(LS_WISHLIST) || "[]");
 let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");
 
@@ -26,7 +48,7 @@ let priceMax = "";
 let modalProduct = null;
 let testiIndex = 0;
 
-/* ====== ELEMENTS ====== */
+/* ===================== ELEMENTS ===================== */
 // nav / theme
 const navToggle = document.getElementById("menu-toggle");
 const navLinks = document.getElementById("nav-links");
@@ -57,13 +79,16 @@ const modalQtySpan = modalQtyWrap?.querySelector("span");
 const adminGear = document.getElementById("admin-gear");
 const adminSidebar = document.getElementById("admin-sidebar");
 const adminClose = document.getElementById("admin-close");
+
 const adminLoginWrap = document.getElementById("admin-login");
 const adminPass = document.getElementById("admin-pass");
 const adminLoginBtn = document.getElementById("admin-login-btn");
+
 const productForm = document.getElementById("product-form");
 const adminActionSection = document.getElementById("admin-action-section");
 const adminExitBtn = document.getElementById("admin-exit");
 
+// form inputs
 const inpId = document.getElementById("prod-id");
 const inpName = document.getElementById("prod-name");
 const selCategory = document.getElementById("prod-category-select");
@@ -94,7 +119,7 @@ const testiTrack = document.getElementById("testiTrack");
 const testiPrev = document.getElementById("testiPrev");
 const testiNext = document.getElementById("testiNext");
 
-/* ====== THEME (via :root.dark) ====== */
+/* ===================== THEME (via :root.dark) ===================== */
 (function initTheme() {
   const saved = localStorage.getItem(LS_THEME);
   if (saved === "dark") document.documentElement.classList.add("dark");
@@ -107,7 +132,7 @@ darkToggle?.addEventListener("click", () => {
   );
 });
 
-/* ====== NAV ====== */
+/* ===================== NAV ===================== */
 navToggle?.addEventListener("click", () => navLinks?.classList.toggle("show"));
 [...document.querySelectorAll(".nav-links a")].forEach((a) => {
   a.addEventListener("click", () => {
@@ -117,21 +142,30 @@ navToggle?.addEventListener("click", () => navLinks?.classList.toggle("show"));
   });
 });
 
-/* ====== HELPERS ====== */
+/* ===================== HELPERS ===================== */
 function showToast(msg) {
   if (!toastContainer) return alert(msg);
   const t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
   toastContainer.appendChild(t);
-  setTimeout(() => t.remove(), 2500);
+  setTimeout(() => t.remove(), 2600);
 }
-const saveProductsLocal = () => localStorage.setItem(LS_PRODUCTS, JSON.stringify(products));
-const saveWishlist = () => localStorage.setItem(LS_WISHLIST, JSON.stringify(wishlist));
-const saveCart = () => localStorage.setItem(LS_CART, JSON.stringify(cart));
+
+const saveProductsLocal = () =>
+  localStorage.setItem(LS_PRODUCTS, JSON.stringify(products));
+
+const saveWishlist = () =>
+  localStorage.setItem(LS_WISHLIST, JSON.stringify(wishlist));
+
+const saveCart = () =>
+  localStorage.setItem(LS_CART, JSON.stringify(cart));
+
 const formatRs = (x) => "Rs " + Number(x || 0).toLocaleString();
+
 const uniqueCategories = () =>
   [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
+
 const debounce = (fn, wait = 300) => {
   let t;
   return (...a) => {
@@ -139,21 +173,47 @@ const debounce = (fn, wait = 300) => {
     t = setTimeout(() => fn(...a), wait);
   };
 };
-const safeImg = (src) => (src ? src : "placeholder.png");
 
-/* ====== API + FALLBACK ====== */
+// Attach admin password header from localStorage (for mutating routes)
+function adminHeaders(extra = {}) {
+  const pwd = localStorage.getItem(LS_ADMIN_PASS) || "";
+  const headers = { ...extra };
+  if (pwd) headers["x-admin-password"] = pwd;
+  return headers;
+}
+
+// Generic safe fetch wrapper with JSON + error handling
+async function safeFetch(url, options = {}) {
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      const err = new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
+      err.status = res.status;
+      throw err;
+    }
+    // 204 no content guard
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) return null;
+    return await res.json();
+  } catch (e) {
+    console.error("Fetch error:", e);
+    throw e;
+  }
+}
+
+/* ===================== API + FALLBACK ===================== */
 async function apiGetProducts() {
   const localSeed = JSON.parse(localStorage.getItem(LS_PRODUCTS) || "null");
   try {
     if (skels) skels.style.display = "grid";
-    const res = await fetch(`${API_URL}/products`, { cache: "no-store" });
-    if (!res.ok) throw new Error("API failed");
-    const data = await res.json();
-    localStorage.setItem(LS_PRODUCTS, JSON.stringify(data));
-    return data;
+    const data = await safeFetch(`${API_URL}/products`, { cache: "no-store" });
+    localStorage.setItem(LS_PRODUCTS, JSON.stringify(data || []));
+    return data || [];
   } catch (e) {
-    console.warn("API failed, using local fallback", e);
+    console.warn("API failed, falling back to local cache.", e);
     if (localSeed?.length) return localSeed;
+    // very small initial seed
     return [
       {
         id: 1,
@@ -193,38 +253,44 @@ async function apiGetProducts() {
     if (skels) skels.style.display = "none";
   }
 }
-const apiCreateProduct = (p) =>
-  fetch(`${API_URL}/products`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(p)
-  }).then((r) => {
-    if (!r.ok) throw 0;
-    return r.json();
-  });
-const apiUpdateProduct = (id, p) =>
-  fetch(`${API_URL}/products/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(p)
-  }).then((r) => {
-    if (!r.ok) throw 0;
-    return r.json();
-  });
-const apiDeleteProduct = (id) =>
-  fetch(`${API_URL}/products/${id}`, { method: "DELETE" }).then((r) => {
-    if (!r.ok) throw 0;
-    return r.json();
-  });
 
-/* ====== SEARCH ====== */
+async function apiCreateProduct(p) {
+  return safeFetch(`${API_URL}/products`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...adminHeaders()
+    },
+    body: JSON.stringify(p)
+  });
+}
+
+async function apiUpdateProduct(id, p) {
+  return safeFetch(`${API_URL}/products/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...adminHeaders()
+    },
+    body: JSON.stringify(p)
+  });
+}
+
+async function apiDeleteProduct(id) {
+  return safeFetch(`${API_URL}/products/${id}`, {
+    method: "DELETE",
+    headers: adminHeaders()
+  });
+}
+
+/* ===================== SEARCH ===================== */
 const onSearch = debounce((v) => {
   currentSearch = (v || "").toLowerCase();
   renderProducts();
-}, 200);
+}, 220);
 searchInput?.addEventListener("input", (e) => onSearch(e.target.value));
 
-/* ====== SORT ====== */
+/* ===================== SORT ===================== */
 sortSelect?.addEventListener("change", () => {
   sortMode = sortSelect.value;
   renderProducts();
@@ -235,7 +301,7 @@ function applySort(list) {
     case "price-asc":
       return L.sort((a, b) => (+a.price || 0) - (+b.price || 0));
     case "price-desc":
-      return L.sort((a, b) => (+b.price || 0) - (+a.price || 0)).reverse();
+      return L.sort((a, b) => (+b.price || 0) - (+a.price || 0));
     case "name-asc":
       return L.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     case "name-desc":
@@ -245,7 +311,7 @@ function applySort(list) {
   }
 }
 
-/* ====== CATEGORY CHIPS ====== */
+/* ===================== CATEGORY CHIPS ===================== */
 function populateCategoryChips(active = "All") {
   currentFilterCat = active;
   categoryButtons.innerHTML = "";
@@ -271,7 +337,7 @@ function populateCategoryChips(active = "All") {
   });
 }
 
-/* ====== PRICE CHIP (inside toolbar) ====== */
+/* ===================== PRICE CHIP (inside toolbar) ===================== */
 function hookPriceChip() {
   const chip = document.getElementById("priceChip");
   if (!chip) return;
@@ -301,11 +367,11 @@ function hookPriceChip() {
   );
 }
 
-/* ====== FILTERED LIST ====== */
+/* ===================== FILTERED LIST ===================== */
 function filteredList() {
   let list = [...products];
 
-  // wishlist or category
+  // wishlist or category filter
   if (showWishlistOnly) list = list.filter((p) => wishlist.includes(p.id));
   else if (currentFilterCat !== "All") list = list.filter((p) => p.category === currentFilterCat);
 
@@ -329,7 +395,7 @@ function filteredList() {
   return applySort(list);
 }
 
-/* ====== RENDER PRODUCTS ====== */
+/* ===================== RENDER PRODUCTS ===================== */
 function renderProducts() {
   hookPriceChip();
 
@@ -342,11 +408,11 @@ function renderProducts() {
     card.className = "product-card";
     card.id = `product-${product.id}`;
 
-    // IMAGE WRAP + OVERLAY
+    // image wrapper
     const imgWrap = document.createElement("div");
     imgWrap.className = "product-image";
 
-    // overlay row (wishlist left, admin right)
+    // overlay: wishlist (left) + admin (right)
     const overlay = document.createElement("div");
     overlay.className = "overlay-actions";
 
@@ -356,12 +422,11 @@ function renderProducts() {
     const right = document.createElement("div");
     right.className = "overlay-right";
 
-    // wishlist heart (TOP-LEFT)
+    // wishlist heart
     const heart = document.createElement("button");
     heart.className = "overlay-btn heart";
     heart.innerHTML = '<i class="fa-regular fa-heart"></i>';
     if (wishlist.includes(product.id)) heart.classList.add("active");
-
     heart.onclick = (e) => {
       e.stopPropagation();
       if (wishlist.includes(product.id)) {
@@ -379,38 +444,43 @@ function renderProducts() {
     };
     left.appendChild(heart);
 
-    // admin edit/delete (TOP-RIGHT)
+    // admin edit/delete (only if isAdmin flag ON)
     if (isAdmin) {
       const edit = document.createElement("button");
       edit.className = "overlay-btn";
       edit.innerHTML = '<i class="fa-solid fa-pen"></i>';
-      edit.title = "Edit";
 
       const del = document.createElement("button");
       del.className = "overlay-btn danger";
       del.innerHTML = '<i class="fa-solid fa-trash"></i>';
-      del.title = "Delete";
 
       edit.onclick = (e) => {
         e.stopPropagation();
         startEdit(product);
       };
+
       del.onclick = async (e) => {
         e.stopPropagation();
         if (!confirm(`Delete "${product.name}"?`)) return;
+
         try {
-          await apiDeleteProduct(product.id);
-          products = products.filter((p) => p.id !== product.id);
-          saveProductsLocal();
-          populateCategoryChips(currentFilterCat);
-          renderProducts();
-          populateCategoryDropdown();
-          showToast("Product deleted");
+          const r = await apiDeleteProduct(product.id);
+          if (r && r.success) {
+            products = products.filter((p) => p.id !== product.id);
+            saveProductsLocal();
+            populateCategoryChips(currentFilterCat);
+            renderProducts();
+            populateCategoryDropdown();
+            showToast("Product deleted");
+          } else {
+            showToast("Delete failed (server).");
+          }
         } catch (err) {
-          console.error(err);
-          showToast("Delete failed");
+          if (err?.status === 401) showToast("Unauthorized — wrong admin password.");
+          else showToast("Delete failed.");
         }
       };
+
       right.append(edit, del);
     }
 
@@ -418,7 +488,7 @@ function renderProducts() {
 
     // image
     const img = document.createElement("img");
-    img.src = safeImg(product.image);
+    img.src = product.image;
     img.alt = product.name;
     img.loading = "lazy";
     img.decoding = "async";
@@ -429,19 +499,19 @@ function renderProducts() {
     imgWrap.append(overlay, img);
     imgWrap.onclick = () => showDetails(product);
 
-    // CONTENT
+    // content
     const content = document.createElement("div");
 
     const h3 = document.createElement("h3");
-    h3.textContent = product.name;
     h3.className = "title";
+    h3.textContent = product.name;
     h3.onclick = () => showDetails(product);
 
     const price = document.createElement("div");
     price.className = "price";
     price.textContent = formatRs(product.price);
 
-    // qty
+    // qty chooser (in card)
     const qty = document.createElement("div");
     qty.className = "quantity-control";
     const minus = document.createElement("button");
@@ -493,10 +563,10 @@ function renderProducts() {
   });
 }
 
-/* ====== MODAL ====== */
+/* ===================== MODAL ===================== */
 function showDetails(p) {
   modalProduct = p;
-  modalImg.src = safeImg(p.image);
+  modalImg.src = p.image;
   modalImg.alt = p.name;
   modalTitle.textContent = p.name;
   modalDetails.textContent = p.details || "";
@@ -530,7 +600,9 @@ modalBuy?.addEventListener("click", () => {
   window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
 });
 
-/* ====== ADMIN ====== */
+/* ===================== ADMIN ===================== */
+// We do not hard-check password on client. We only store whatever user enters in localStorage,
+// and the server validates it on POST/PUT/DELETE using "x-admin-password".
 function refreshAdminUI() {
   if (isAdmin) {
     adminLoginWrap.style.display = "none";
@@ -544,15 +616,18 @@ function refreshAdminUI() {
   // re-render so edit/delete overlay appears/disappears
   renderProducts();
 }
+
 adminGear?.addEventListener("click", () => {
   adminSidebar.classList.add("open");
   adminSidebar.setAttribute("aria-hidden", "false");
   refreshAdminUI();
 });
+
 adminClose?.addEventListener("click", () => {
   adminSidebar.classList.remove("open");
   adminSidebar.setAttribute("aria-hidden", "true");
 });
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     adminSidebar.classList.remove("open");
@@ -561,17 +636,25 @@ document.addEventListener("keydown", (e) => {
 });
 
 adminLoginBtn?.addEventListener("click", () => {
-  if ((adminPass.value || "").trim() === ADMIN_PASSWORD) {
-    isAdmin = true;
-    localStorage.setItem(LS_ADMIN, "true");
-    adminPass.value = "";
-    refreshAdminUI();
-    showToast("Admin mode ON");
-  } else alert("Incorrect password!");
+  const pwd = (adminPass.value || "").trim();
+  if (!pwd) {
+    alert("Enter admin password.");
+    return;
+  }
+  // Save to localStorage and enable admin UI.
+  localStorage.setItem(LS_ADMIN_PASS, pwd);
+  isAdmin = true;
+  localStorage.setItem(LS_ADMIN_MODE, "true");
+  adminPass.value = "";
+  refreshAdminUI();
+  showToast("Admin mode ON");
 });
+
 adminExitBtn?.addEventListener("click", () => {
   isAdmin = false;
-  localStorage.setItem(LS_ADMIN, "false");
+  localStorage.setItem(LS_ADMIN_MODE, "false");
+  // clear stored password for extra safety
+  localStorage.removeItem(LS_ADMIN_PASS);
   refreshAdminUI();
   showToast("Admin mode OFF");
 });
@@ -587,9 +670,10 @@ function populateCategoryDropdown() {
 }
 
 let editingId = null;
+
 productForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!isAdmin) return alert("Login as admin first.");
+  if (!isAdmin) return alert("Login as admin first (password required).");
 
   const idVal = inpId.value ? +inpId.value : null;
   const name = (inpName.value || "").trim();
@@ -600,13 +684,22 @@ productForm?.addEventListener("submit", async (e) => {
   const url = (inpImageURL.value || "").trim();
   const file = inpImageFile.files[0];
 
-  if (!name || (!categorySelect && !newCategory) || isNaN(price) || !details || (!url && !file))
-    return alert("Fill all fields and image.");
+  if (!name || (!categorySelect && !newCategory) || isNaN(price) || !details || (!url && !file)) {
+    alert("Fill all fields and at least one image (URL or Upload).");
+    return;
+  }
 
   const category = newCategory || categorySelect;
 
   let imageData = url;
-  if (file) imageData = await fileToBase64(file);
+  if (file) {
+    try {
+      imageData = await fileToBase64(file);
+    } catch {
+      showToast("Image read failed.");
+      return;
+    }
+  }
 
   const payload = { name, category, price, image: imageData, details };
 
@@ -615,32 +708,41 @@ productForm?.addEventListener("submit", async (e) => {
       const id = idVal || editingId;
       const updated = await apiUpdateProduct(id, payload);
       const idx = products.findIndex((p) => p.id === id);
-      if (idx > -1) products[idx] = updated;
+      if (idx > -1 && updated) products[idx] = updated;
       showToast("Product updated");
     } else {
       const created = await apiCreateProduct(payload);
-      products.push(created);
+      if (created) products.push(created);
       showToast("Product added");
     }
+
     saveProductsLocal();
     productForm.reset();
     inpId.value = "";
     selCategory.value = "";
     inpNewCategory.value = "";
+
     populateCategoryDropdown();
     populateCategoryChips(currentFilterCat);
     renderProducts();
   } catch (err) {
-    console.error(err);
-    alert("Save failed (API).");
+    if (err?.status === 401) {
+      showToast("Unauthorized — wrong admin password.");
+    } else {
+      alert("Save failed (API).");
+    }
+  } finally {
+    editingId = null;
   }
 });
+
 formReset?.addEventListener("click", () => {
   editingId = null;
   productForm.reset();
   inpId.value = "";
   selCategory.value = "";
 });
+
 function startEdit(p) {
   editingId = p.id;
   inpId.value = p.id;
@@ -655,11 +757,13 @@ function startEdit(p) {
     selCategory.value = "";
     inpNewCategory.value = p.category;
   }
+  // Only put URL back if it wasn't base64
   inpImageURL.value = p.image && !String(p.image).startsWith("data:") ? p.image : "";
 
   adminSidebar.classList.add("open");
   refreshAdminUI();
 }
+
 function fileToBase64(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
@@ -669,7 +773,7 @@ function fileToBase64(file) {
   });
 }
 
-/* ====== CART ====== */
+/* ===================== CART ===================== */
 function addToCart(p, qty = 1) {
   const ex = cart.find((i) => i.id === p.id);
   if (ex) ex.qty += qty;
@@ -689,28 +793,25 @@ function updateCartQty(id, delta) {
 const cartTotal = () => cart.reduce((s, i) => s + i.price * i.qty, 0);
 
 function renderCart() {
-  // Use classes that match CSS: .cart-item grid, img capped.
   cartItems.innerHTML = "";
   if (!cart.length) {
     cartItems.innerHTML = '<div class="empty">Your cart is empty.</div>';
   } else {
     cart.forEach((it) => {
       const row = document.createElement("div");
-      row.className = "cart-item";
+      row.className = "cart-row";
       row.innerHTML = `
-        <img src="${safeImg(it.image)}" alt="${it.name}" onerror="this.src='placeholder.png'">
+        <img src="${it.image}" alt="${it.name}" onerror="this.src='placeholder.png'">
         <div class="cart-info">
-          <div class="title">${it.name}</div>
-          <div class="price">${formatRs(it.price)}</div>
+          <div class="cart-title">${it.name}</div>
+          <div class="cart-price">${formatRs(it.price)}</div>
+          <div class="quantity-control sm">
+            <button class="c-minus" aria-label="Decrease">-</button>
+            <span>${it.qty}</span>
+            <button class="c-plus" aria-label="Increase">+</button>
+          </div>
         </div>
-        <div class="qty">
-          <button class="c-minus" aria-label="Decrease">-</button>
-          <span>${it.qty}</span>
-          <button class="c-plus" aria-label="Increase">+</button>
-        </div>
-        <button class="rm" title="Remove">&times;</button>
-      `;
-
+        <button class="c-remove" title="Remove" aria-label="Remove">&times;</button>`;
       row.querySelector(".c-minus").onclick = () => {
         updateCartQty(it.id, -1);
         renderCart();
@@ -721,7 +822,7 @@ function renderCart() {
         renderCart();
         updateBadges();
       };
-      row.querySelector(".rm").onclick = () => {
+      row.querySelector(".c-remove").onclick = () => {
         removeFromCart(it.id);
         renderCart();
         updateBadges();
@@ -731,8 +832,10 @@ function renderCart() {
   }
   cartSubtotal.textContent = formatRs(cartTotal());
 }
+
 const openCart = () => cartDrawer.classList.add("open");
 const closeCart = () => cartDrawer.classList.remove("open");
+
 cartBtn?.addEventListener("click", () => {
   renderCart();
   openCart();
@@ -753,7 +856,7 @@ cartCheckout?.addEventListener("click", () => {
   window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
 });
 
-/* ====== WISHLIST TOGGLE ====== */
+/* ===================== WISHLIST TOGGLE ===================== */
 wishlistBtn?.addEventListener("click", () => {
   showWishlistOnly = !showWishlistOnly;
   showToast(showWishlistOnly ? "Showing Wishlist" : "Showing All Products");
@@ -767,7 +870,7 @@ function updateBadges() {
   if (wishlistCount) wishlistCount.textContent = String(wishlist.length);
 }
 
-/* ====== TESTIMONIALS SLIDER ====== */
+/* ===================== TESTIMONIALS SLIDER ===================== */
 function slideTestimonials(d) {
   if (!testiTrack) return;
   const cards = testiTrack.querySelectorAll(".testi-card");
@@ -780,7 +883,7 @@ testiPrev?.addEventListener("click", () => slideTestimonials(-1));
 testiNext?.addEventListener("click", () => slideTestimonials(+1));
 setInterval(() => slideTestimonials(1), 6000);
 
-/* ====== SCROLL FADE-IN ====== */
+/* ===================== SCROLL FADE-IN ===================== */
 document.addEventListener("scroll", () => {
   document.querySelectorAll(".fade-in").forEach((s) => {
     const t = s.getBoundingClientRect().top;
@@ -789,7 +892,7 @@ document.addEventListener("scroll", () => {
 });
 document.dispatchEvent(new Event("scroll"));
 
-/* ====== DEEP LINK (scroll to product-{id}) ====== */
+/* ===================== DEEP LINK (scroll to product-{id}) ===================== */
 window.addEventListener("hashchange", () => {
   const id = location.hash.replace("#product-", "");
   if (id) {
@@ -802,7 +905,7 @@ window.addEventListener("hashchange", () => {
   }
 });
 
-/* ====== INIT ====== */
+/* ===================== INIT ===================== */
 async function init() {
   try {
     products = await apiGetProducts();
@@ -819,12 +922,34 @@ async function init() {
 }
 init();
 
-/* ====== Tiny utilities for DX (optional) ====== */
-// Expose for debugging
-window.__store = {
-  get products() { return products; },
-  get cart() { return cart; },
-  get wishlist() { return wishlist; },
-  clearCart() { cart = []; saveCart(); renderCart(); updateBadges(); },
-  clearWishlist() { wishlist = []; saveWishlist(); updateBadges(); renderProducts(); }
-};
+/* ===================== OPTIONAL: SMALL UTIL EXTRAS ===================== */
+/* Not strictly required for core features, but helpful for UX/debug */
+
+// Ctrl+/ to quickly toggle admin sidebar (desktop only)
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+    const open = adminSidebar.classList.contains("open");
+    if (open) {
+      adminSidebar.classList.remove("open");
+      adminSidebar.setAttribute("aria-hidden", "true");
+    } else {
+      adminSidebar.classList.add("open");
+      adminSidebar.setAttribute("aria-hidden", "false");
+      refreshAdminUI();
+    }
+  }
+});
+
+// Basic network offline/online toasts
+window.addEventListener("offline", () => showToast("You are offline. Some features may not work."));
+window.addEventListener("online", () => showToast("Back online!"));
+
+// Defensive: ensure counts visible even if DOM delayed
+setTimeout(updateBadges, 0);
+
+// Warn if admin mode is on but password is missing
+if (isAdmin && !localStorage.getItem(LS_ADMIN_PASS)) {
+  console.warn("Admin mode ON but no password stored — server writes will fail (401).");
+}
+
+/* ===================== END OF FILE ===================== */
